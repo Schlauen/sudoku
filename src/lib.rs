@@ -51,7 +51,6 @@ pub struct PlayfieldState {
     solved: bool,
     show_errors: bool,
     status_text: String,
-    difficulty: f32,
 }
 
 #[wasm_bindgen]
@@ -68,7 +67,6 @@ impl PlayfieldState {
             solved: false,
             show_errors: false,
             status_text: format!(""),
-            difficulty: 55.0,
         }
     }
 
@@ -83,7 +81,6 @@ impl PlayfieldState {
         self.solved = false;
         self.show_errors = false;
         self.status_text = format!("");
-        self.difficulty = 55.0;
     }
 
     pub fn set_value(&mut self, value:u8, row:usize, col:usize) {
@@ -146,7 +143,15 @@ impl PlayfieldState {
         self.fixed[(row, col)]
     }
 
-    pub fn generate(&mut self) {
+    pub fn get_show_errors(&self) -> bool {
+        self.show_errors
+    }
+
+    pub fn toggle_show_errors(&mut self) {
+        self.show_errors = !self.show_errors; 
+    }
+
+    pub fn generate(&mut self, difficulty:u8) {
         self.reset();
 
         let mut values_random_mask: [u8; 9] = core::array::from_fn(|i| (i + 1) as u8);
@@ -162,7 +167,7 @@ impl PlayfieldState {
             panic!("No solution found");
         }
         let mut solution = self.values.clone();
-        if !self.generate_(cursor_random_mask, 0, 0) {
+        if !self.generate_(cursor_random_mask, 0, 0, difficulty) {
             panic!("No solution generated");
         }
 
@@ -294,12 +299,12 @@ impl PlayfieldState {
         }
     }
 
-    fn generate_(&mut self, fields_queue: [usize; 81], cursor:usize, removed_count:u8) -> bool {
+    fn generate_(&mut self, fields_queue: [usize; 81], cursor:usize, removed_count:u8, difficulty:u8) -> bool {
         if cursor >= 81 || self.multiple_solutions_(0) > 1 {
             return false;
         }
         
-        if removed_count >= self.difficulty as u8 {
+        if removed_count >= difficulty as u8 {
             return true;
         }
 
@@ -313,12 +318,12 @@ impl PlayfieldState {
 
         self.reset_value_(row, col, quad, mov_zero_based);
 
-        if self.generate_(fields_queue, cursor + 1, removed_count + 1) {
+        if self.generate_(fields_queue, cursor + 1, removed_count + 1, difficulty) {
             return true;
         }
 
         self.set_value_(row, col, quad, mov_zero_based);
-        return self.generate_(fields_queue, cursor + 1, removed_count);
+        self.generate_(fields_queue, cursor + 1, removed_count, difficulty)
     }
 
     fn multiple_solutions_(&mut self, cursor:usize) -> u8 {
