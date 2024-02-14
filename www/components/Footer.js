@@ -1,7 +1,7 @@
 function Footer() {
     let footer = document.createElement("div");
-    footer.id = 'footer';
     footer.innerHTML = 'made with 💗 by Lauen';
+    footer.id = 'footer';
     return footer;
 }
 

@@ -1,20 +1,32 @@
 use wasm_bindgen::prelude::*;
 use array2d::Array2D;
-use bitvec::prelude::*;
+use bitvec::{field, prelude::*};
 use rand::prelude::*;
 
-const FIELDS:[(u8, u8); 81] = [
-    (0,0), (0,1), (0,2), (0,3), (0,4), (0,5), (0,6), (0,7), (0,8),
-    (1,0), (1,1), (1,2), (1,3), (1,4), (1,5), (1,6), (1,7), (1,8),
-    (2,0), (2,1), (2,2), (2,3), (2,4), (2,5), (2,6), (2,7), (2,8),
-    (3,0), (3,1), (3,2), (3,3), (3,4), (3,5), (3,6), (3,7), (3,8),
-    (4,0), (4,1), (4,2), (4,3), (4,4), (4,5), (4,6), (4,7), (4,8),
-    (5,0), (5,1), (5,2), (5,3), (5,4), (5,5), (5,6), (5,7), (5,8),
-    (6,0), (6,1), (6,2), (6,3), (6,4), (6,5), (6,6), (6,7), (6,8),
-    (7,0), (7,1), (7,2), (7,3), (7,4), (7,5), (7,6), (7,7), (7,8),
-    (8,0), (8,1), (8,2), (8,3), (8,4), (8,5), (8,6), (8,7), (8,8),
+// (row, col, quad) triplets
+const FIELDS:[((usize, usize), usize); 81] = [
+    ((0,0),0), ((0,1),0), ((0,2),0), ((0,3),1), ((0,4),1), ((0,5),1), ((0,6),2), ((0,7),2), ((0,8),2),
+    ((1,0),0), ((1,1),0), ((1,2),0), ((1,3),1), ((1,4),1), ((1,5),1), ((1,6),2), ((1,7),2), ((1,8),2),
+    ((2,0),0), ((2,1),0), ((2,2),0), ((2,3),1), ((2,4),1), ((2,5),1), ((2,6),2), ((2,7),2), ((2,8),2),
+    ((3,0),3), ((3,1),3), ((3,2),3), ((3,3),4), ((3,4),4), ((3,5),4), ((3,6),5), ((3,7),5), ((3,8),5),
+    ((4,0),3), ((4,1),3), ((4,2),3), ((4,3),4), ((4,4),4), ((4,5),4), ((4,6),5), ((4,7),5), ((4,8),5),
+    ((5,0),3), ((5,1),3), ((5,2),3), ((5,3),4), ((5,4),4), ((5,5),4), ((5,6),5), ((5,7),5), ((5,8),5),
+    ((6,0),6), ((6,1),6), ((6,2),6), ((6,3),7), ((6,4),7), ((6,5),7), ((6,6),8), ((6,7),8), ((6,8),8),
+    ((7,0),6), ((7,1),6), ((7,2),6), ((7,3),7), ((7,4),7), ((7,5),7), ((7,6),8), ((7,7),8), ((7,8),8),
+    ((8,0),6), ((8,1),6), ((8,2),6), ((8,3),7), ((8,4),7), ((8,5),7), ((8,6),8), ((8,7),8), ((8,8),8),
 ];
-const QUADS:[[u8;9];9] = [
+// const FIELDS:[((usize, usize), usize); 81] = [
+//     ((0,0),0), ((0,1),0), ((0,2),0), ((0,3),1), ((0,4),1), (0,5,1), (0,6,2), (0,7,2), (0,8,2),
+//     (1,0,0), (1,1,0), (1,2,0), (1,3,1), (1,4,1), (1,5,1), (1,6,2), (1,7,2), (1,8,2),
+//     (2,0,0), (2,1,0), (2,2,0), (2,3,1), (2,4,1), (2,5,1), (2,6,2), (2,7,2), (2,8,2),
+//     (3,0,3), (3,1,3), (3,2,3), (3,3,4), (3,4,4), (3,5,4), (3,6,5), (3,7,5), (3,8,5),
+//     (4,0,3), (4,1,3), (4,2,3), (4,3,4), (4,4,4), (4,5,4), (4,6,5), (4,7,5), (4,8,5),
+//     (5,0,3), (5,1,3), (5,2,3), (5,3,4), (5,4,4), (5,5,4), (5,6,5), (5,7,5), (5,8,5),
+//     (6,0,6), (6,1,6), (6,2,6), (6,3,7), (6,4,7), (6,5,7), (6,6,8), (6,7,8), (6,8,8),
+//     (7,0,6), (7,1,6), (7,2,6), (7,3,7), (7,4,7), (7,5,7), (7,6,8), (7,7,8), (7,8,8),
+//     (8,0,6), (8,1,6), (8,2,6), (8,3,7), (8,4,7), (8,5,7), (8,6,8), (8,7,8), (8,8,8),
+// ];
+const QUADS:[[usize;9];9] = [
     [0,0,0,1,1,1,2,2,2,],
     [0,0,0,1,1,1,2,2,2,],
     [0,0,0,1,1,1,2,2,2,],
@@ -84,7 +96,8 @@ impl PlayfieldState {
     }
 
     pub fn set_value(&mut self, value:u8, row:usize, col:usize) {
-        if self.fixed[(row, col)] {
+        let rc = (row, col);
+        if self.fixed[rc] {
             return;
         }
 
@@ -93,25 +106,24 @@ impl PlayfieldState {
             return;
         }
 
-        let current_val = self.values[(row, col)];
+        let current_val = self.values[rc];
         if current_val > 0 {
             self.reset_value(row, col);
         }
 
         let mov_zero_based = (value - 1) as usize;
-        match self.get_possible_moves(row, col) {
+        match self.get_possible_moves(rc) {
             Some(moves) => {
                 if moves.contains(&mov_zero_based) {
-                    let quad = QUADS[row][col] as usize;
-                    self.set_value_(row, col, quad, mov_zero_based);
+                    self.set_value_((rc, QUADS[row][col]), mov_zero_based);
                 } else {
-                    self.errors[(row, col)] = true;
-                    self.values[(row, col)] = value;
+                    self.errors[rc] = true;
+                    self.values[rc] = value;
                 }
             },
             None => {
-                self.errors[(row, col)] = true;
-                self.values[(row, col)] = value;
+                self.errors[rc] = true;
+                self.values[rc] = value;
             }
         }
     }
@@ -196,26 +208,27 @@ impl PlayfieldState {
     }
 
     pub fn reset_value(&mut self, row:usize, col:usize) {
-        if self.fixed[(row, col)] {
+        let rc = (row, col);
+        if self.fixed[rc] {
             return;
         }
 
-        let current_val = self.values[(row, col)];
+        let current_val = self.values[rc];
 
         if current_val == 0 {
             return;
         }
 
-        if self.errors[(row, col)] {
-            self.errors[(row, col)] = false;
-            self.fixed[(row, col)] = false;
-            self.values[(row, col)] = 0;
+        if self.errors[rc] {
+            self.errors[rc] = false;
+            self.fixed[rc] = false;
+            self.values[rc] = 0;
             return;
         }
 
         let quad = QUADS[row][col] as usize;
         let mov_zero_based = (current_val - 1) as usize;
-        self.reset_value_(row, col, quad, mov_zero_based)
+        self.reset_value_((rc, quad), mov_zero_based)
     }
 
     pub fn solve(&mut self) {   
@@ -250,24 +263,22 @@ impl PlayfieldState {
         if cursor >= 81 {
             return true;
         }
-        let field = FIELDS[cursor];
-        let row = field.0 as usize;
-        let col = field.1 as usize;
-        let quad = QUADS[row][col] as usize;
+        let rcq = FIELDS[cursor];
+        let (rc, _) = rcq;
 
-        match self.get_possible_moves(row, col) {
+        match self.get_possible_moves(rc) {
             None => self.solve_(cursor + 1),
             Some(moves) => {
                 for mov_zero_based in moves {
-                    self.set_value_(row, col, quad, mov_zero_based);
+                    self.set_value_(rcq, mov_zero_based);
         
                     if self.solve_(cursor + 1) {
                         return true;
                     }
 
-                    self.reset_value(row, col);
+                    self.reset_value_(rcq, mov_zero_based);
                 }
-                return false;
+                false
             }
         }
     }
@@ -276,25 +287,23 @@ impl PlayfieldState {
         if cursor >= 81 {
             return true;
         }
-        let field = FIELDS[cursor];
-        let row = field.0 as usize;
-        let col = field.1 as usize;
-        let quad = QUADS[row][col] as usize;
+        let rcq = FIELDS[cursor];
+        let (rc, _) = rcq;
 
-        match self.get_possible_moves(row, col) {
+        match self.get_possible_moves(rc) {
             None => self.solve_(cursor + 1),
             Some(mut moves) => {
                 moves.shuffle(&mut thread_rng());
                 for mov_zero_based in moves {
-                    self.set_value_(row, col, quad, mov_zero_based);
+                    self.set_value_(rcq, mov_zero_based);
         
                     if self.solve_(cursor + 1) {
                         return true;
                     }
 
-                    self.reset_value(row, col);
+                    self.reset_value_(rcq, mov_zero_based);
                 }
-                return false;
+                false
             }
         }
     }
@@ -308,21 +317,19 @@ impl PlayfieldState {
             return true;
         }
 
-        let field = FIELDS[fields_queue[cursor]];
-        let row = field.0 as usize;
-        let col = field.1 as usize;
-        let quad = QUADS[row][col] as usize;
+        let rcq = FIELDS[fields_queue[cursor]];
+        let (rc, _) = rcq;
 
-        let mov = self.values[(row, col)];
+        let mov = self.values[rc];
         let mov_zero_based = (mov - 1) as usize;
 
-        self.reset_value_(row, col, quad, mov_zero_based);
+        self.reset_value_(rcq, mov_zero_based);
 
         if self.generate_(fields_queue, cursor + 1, removed_count + 1, difficulty) {
             return true;
         }
 
-        self.set_value_(row, col, quad, mov_zero_based);
+        self.set_value_(rcq, mov_zero_based);
         self.generate_(fields_queue, cursor + 1, removed_count, difficulty)
     }
 
@@ -330,57 +337,105 @@ impl PlayfieldState {
         if cursor >= 81 {
             return 1;
         }
-        let field = FIELDS[cursor];
-        let row = field.0 as usize;
-        let col = field.1 as usize;
-        let quad = QUADS[row][col] as usize;
+        let rcq = FIELDS[cursor];
+        let (rc, _) = rcq;
 
-        match self.get_possible_moves(row, col) {
+        match self.get_possible_moves(rc) {
             None => self.multiple_solutions_(cursor + 1),
             Some(moves) => {
                 let mut sum = 0;
                 for mov_zero_based in moves {
-                    // println!("row: {row}, col: {col}, val: {mov_zero_based}");
-                    self.set_value_(row, col, quad, mov_zero_based);
+                    self.set_value_(rcq, mov_zero_based);
         
                     sum += self.multiple_solutions_(cursor + 1);
 
-                    self.reset_value(row, col);
+                    self.reset_value_(rcq, mov_zero_based);
                     if sum > 1 {
                         return 2;
                     }
                 }
-                return sum;
+                sum
             }
         }
     }
 
-    fn reset_value_(&mut self, row:usize, col:usize, quad:usize, mov_zero_based:usize) {
+    fn reset_value_(&mut self, rcq:((usize, usize), usize), mov_zero_based:usize) {
         let mov_bin = VALUES_BIN[mov_zero_based];
-        self.values[(row, col)] = 0;
+        let (rc, quad) = rcq;
+        self.values[rc] = 0;
+        let (row, col) = rc;
         self.poss_rows[row] |= mov_bin;
         self.poss_cols[col] |= mov_bin;
         self.poss_quads[quad] |= mov_bin;
     }
 
-    fn set_value_(&mut self, row:usize, col:usize, quad:usize, mov_zero_based:usize) {
+    fn set_value_(&mut self, rcq:((usize, usize), usize), mov_zero_based:usize) {
         let mov_bin_inv = VALUES_BIN_INV[mov_zero_based];
-
+        let (rc, quad) = rcq;
+        let (row, col) = rc;
         self.poss_rows[row] &= mov_bin_inv;
         self.poss_cols[col] &= mov_bin_inv;
         self.poss_quads[quad] &= mov_bin_inv;
-        self.values[(row, col)] = (mov_zero_based + 1) as u8;
+        self.values[rc] = (mov_zero_based + 1) as u8;
     }
 
-    fn get_possible_moves(&mut self, row:usize, col:usize) -> Option<Vec<usize>> {
-        let val: u8 = self.values[(row, col)];
+    fn get_possible_moves(&mut self, rc:(usize,usize)) -> Option<Vec<usize>> {
+        let val: u8 = self.values[rc];
         if val > 0 {
             return Option::None;
         }
         
+        let (row, col) = rc;
         let quad = QUADS[row][col] as usize;
         let poss:u16 = self.poss_rows[row] & self.poss_cols[col] & self.poss_quads[quad];
-        return Option::Some(poss.view_bits::<Lsb0>()[0..9].iter_ones().collect());
+        Option::Some(poss.view_bits::<Lsb0>()[0..9].iter_ones().collect())
+    }
+
+    fn get_seed(&mut self, difficulty:u8) {
+        // We try to remove weak clues and keep few strong ones
+        // The strength of an existing clue is the number of possibilities in the field when the clue is removed.
+        // For the first 9 clues that are removed from a full solution, the weakest possible clues have strength 1. 
+        // The next 9 have at least strength 2 and so on
+
+        let mut cursor_random_mask: Vec<usize> = (0..81).collect();
+        cursor_random_mask.shuffle(&mut thread_rng());
+
+        let mut cursor_queue: Vec<usize> = Vec::new();
+
+
+        for cursor in 0..81 {
+
+
+        }
+        
+
+
+    }
+
+    fn get_weakest_clue(&mut self) -> usize {
+        let mut weakest_strength = 10;
+        let mut weakest_clue = 82;
+        for clue in 0..81 {
+            let rcq = FIELDS[clue];
+            let (rc, _) = rcq;
+
+            let value = self.values[rc];
+            if value == 0 {
+                continue;
+            }
+            let mov_zero_based = (value - 1) as usize;
+
+            self.reset_value_(rcq, mov_zero_based);
+            let strength = self.get_possible_moves(rc).map(|x| x.len())
+                .expect("should have possible values after removing clue.");
+            self.set_value_(rcq, mov_zero_based);
+
+            if strength < weakest_strength {
+                weakest_strength = strength;
+                weakest_clue = clue;
+            }
+        }
+        weakest_clue
     }
 }
 
@@ -399,6 +454,12 @@ mod tests {
         let mut playfield = PlayfieldState::new();
         playfield.solve();
         assert!(playfield.multiple_solutions_(0) == 1);
+    }
+
+    #[test]
+    fn x() {
+        let a: Vec<u8> = (0..11).map(|i| (i / 3) + 1).collect();
+        assert_eq!(a, vec![1,1,1,2,2,2,3,3,3,4,4]);
         // assert_eq!(1, playfield.count_solutions());
     }
 
@@ -414,8 +475,8 @@ mod tests {
         cursor_random_mask.shuffle(&mut thread_rng());
 
         for i in 0..20 {
-            let field = FIELDS[cursor_random_mask[i]];
-            playfield.set_value(0, field.0 as usize, field.1 as usize);
+            let ((row, col), _) = FIELDS[cursor_random_mask[i]];
+            playfield.set_value(0, row, col);
         }
 
         let values_before = playfield.values.clone();
@@ -485,7 +546,7 @@ mod tests {
         playfield.set_value(7, 1, 9);
         playfield.set_value(7, 1, 0);
 
-        assert_eq!(playfield.get_possible_moves(7, 1).unwrap(), vec![3,8]);
+        assert_eq!(playfield.get_possible_moves((7, 1)).unwrap(), vec![3,8]);
 
         assert_eq!(playfield.multiple_solutions_(0), 1);
     }
@@ -503,18 +564,18 @@ mod tests {
 
         for i in 0..9 {
             if row != i {
-                assert_eq!(playfield.get_possible_moves(row, i).unwrap(), v.clone());
+                assert_eq!(playfield.get_possible_moves((row, i)).unwrap(), v.clone());
             }
 
             if col != i {
-                assert_eq!(playfield.get_possible_moves(i, col).unwrap(), v.clone());
+                assert_eq!(playfield.get_possible_moves((i, col)).unwrap(), v.clone());
             }
 
             if !(row == i && col == i) {
                 let r = i/3;
                 let c = i%3;
 
-                assert_eq!(playfield.get_possible_moves(r, c).unwrap(), v.clone());
+                assert_eq!(playfield.get_possible_moves((r, c)).unwrap(), v.clone());
             }
         }
     }
