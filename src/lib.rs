@@ -1,6 +1,6 @@
 use wasm_bindgen::prelude::*;
 use array2d::Array2D;
-use bitvec::{field, prelude::*};
+use bitvec::prelude::*;
 use rand::prelude::*;
 
 // (row, col, quad) triplets
@@ -169,17 +169,13 @@ impl PlayfieldState {
         let mut values_random_mask: [u8; 9] = core::array::from_fn(|i| (i + 1) as u8);
         values_random_mask.shuffle(&mut thread_rng());
 
-        let mut cursor_random_mask: [usize; 81] = [0; 81];
-        for i in 0..81 {
-            cursor_random_mask[i] = i;
-        }
-        cursor_random_mask.shuffle(&mut thread_rng());
-
         if !self.solve_random_(0) {
             panic!("No solution found");
         }
         let mut solution = self.values.clone();
-        if !self.generate_(cursor_random_mask, 0, 0, difficulty) {
+        let cursor_random_mask = self.generate_seed();
+        
+        if !self.generate_(&cursor_random_mask, 0, 0, difficulty) {
             panic!("No solution generated");
         }
 
@@ -308,7 +304,7 @@ impl PlayfieldState {
         }
     }
 
-    fn generate_(&mut self, fields_queue: [usize; 81], cursor:usize, removed_count:u8, difficulty:u8) -> bool {
+    fn generate_(&mut self, fields_queue: &Vec<usize>, cursor:usize, removed_count:u8, difficulty:u8) -> bool {
         if cursor >= 81 || self.multiple_solutions_(0) > 1 {
             return false;
         }
@@ -379,7 +375,7 @@ impl PlayfieldState {
         self.values[rc] = (mov_zero_based + 1) as u8;
     }
 
-    fn get_possible_moves(&mut self, rc:(usize,usize)) -> Option<Vec<usize>> {
+    fn get_possible_moves(&self, rc:(usize,usize)) -> Option<Vec<usize>> {
         let val: u8 = self.values[rc];
         if val > 0 {
             return Option::None;
@@ -391,57 +387,98 @@ impl PlayfieldState {
         Option::Some(poss.view_bits::<Lsb0>()[0..9].iter_ones().collect())
     }
 
-    fn get_seed(&mut self, difficulty:u8) {
+    fn generate_seed(&mut self) -> Vec<usize> {
         // We try to remove weak clues and keep few strong ones
         // The strength of an existing clue is the number of possibilities in the field when the clue is removed.
         // For the first 9 clues that are removed from a full solution, the weakest possible clues have strength 1. 
+        // For the first 9 clues that are removed from a full solution, the weakest possible clues have strength 1. 
+        // The next 9 have at least strength 2 and so on
+        // For the first 9 clues that are removed from a full solution, the weakest possible clues have strength 1.
         // The next 9 have at least strength 2 and so on
 
-        let mut cursor_random_mask: Vec<usize> = (0..81).collect();
-        cursor_random_mask.shuffle(&mut thread_rng());
+        let values = self.values.clone();
+        let mut fields: Vec<usize> = (0..81).collect();
+        fields.shuffle(&mut thread_rng());
 
         let mut cursor_queue: Vec<usize> = Vec::new();
 
-
-        for cursor in 0..81 {
-
-
+        while fields.len() > 0 {
+            let weakest_clue_idx = self.get_weakest_clue_idx_in(&fields);
+            let weakest_clue = fields.remove(weakest_clue_idx);
+            let rcq = FIELDS[weakest_clue];
+            let (rc, _) = rcq;
+            let value = self.values[rc];
+            self.reset_value_(rcq, (value - 1) as usize);
+            cursor_queue.push(weakest_clue);
         }
-        
 
-
+        for (cursor, value) in values.elements_row_major_iter().enumerate() {
+            let rcq = FIELDS[cursor];
+            self.set_value_(rcq, (*value - 1) as usize);
+        }
+        cursor_queue
     }
 
-    fn get_weakest_clue(&mut self) -> usize {
+    fn get_weakest_clue_idx_in(&self, fields:&Vec<usize>) -> usize {
         let mut weakest_strength = 10;
-        let mut weakest_clue = 82;
-        for clue in 0..81 {
-            let rcq = FIELDS[clue];
+        let mut weakest_clue_idx = 0;
+        for (clue_idx, clue) in fields.iter().enumerate() {
+            let rcq = FIELDS[*clue];
             let (rc, _) = rcq;
 
             let value = self.values[rc];
             if value == 0 {
                 continue;
             }
-            let mov_zero_based = (value - 1) as usize;
-
-            self.reset_value_(rcq, mov_zero_based);
-            let strength = self.get_possible_moves(rc).map(|x| x.len())
-                .expect("should have possible values after removing clue.");
-            self.set_value_(rcq, mov_zero_based);
-
+            let strength = self.get_strength(rcq);
             if strength < weakest_strength {
                 weakest_strength = strength;
-                weakest_clue = clue;
+                weakest_clue_idx = clue_idx;
             }
         }
-        weakest_clue
+        weakest_clue_idx
+    }
+
+    fn get_strength(&self, rcq:((usize, usize), usize)) -> usize {
+        let (rc, quad) = rcq;
+        let (row, col) = rc;
+
+        let value = self.values[rc];
+
+        let poss = match value == 0 {
+            true => {
+                self.poss_rows[row] & self.poss_cols[col] & self.poss_quads[quad]
+            },
+            false => {
+                let mov_zero_based = (value - 1) as usize;
+                let mov_bin = VALUES_BIN[mov_zero_based];
+                let (row, col) = rc;
+                (self.poss_rows[row] | mov_bin) & (self.poss_cols[col] | mov_bin) & (self.poss_quads[quad] | mov_bin)
+            }
+        };
+        poss.view_bits::<Lsb0>()[0..9].count_ones()
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_generation() {
+
+        use std::time::Instant;
+        let now = Instant::now();
+        let mut playfield = PlayfieldState::new();
+        {
+            for _ in 0..50 {
+                playfield.generate(55);
+            }
+        }
+    
+        let elapsed = now.elapsed();
+        println!("Elapsed: {:.2?}", elapsed);
+    }
 
     #[test]
     fn test_solution_counter_empty() {
@@ -454,13 +491,6 @@ mod tests {
         let mut playfield = PlayfieldState::new();
         playfield.solve();
         assert!(playfield.multiple_solutions_(0) == 1);
-    }
-
-    #[test]
-    fn x() {
-        let a: Vec<u8> = (0..11).map(|i| (i / 3) + 1).collect();
-        assert_eq!(a, vec![1,1,1,2,2,2,3,3,3,4,4]);
-        // assert_eq!(1, playfield.count_solutions());
     }
 
     #[test]
@@ -488,24 +518,24 @@ mod tests {
     #[test]
     fn test_solution_counter_partial_2() {
         let mut playfield = PlayfieldState::new();
-        playfield.set_value(0, 6, 7);
-        playfield.set_value(0, 8, 9);
-        playfield.set_value(1, 6, 1);
-        playfield.set_value(2, 3, 1);
-        playfield.set_value(2, 4, 2);
-        playfield.set_value(3, 4, 6);
-        playfield.set_value(4, 2, 5);
-        playfield.set_value(4, 3, 8);
-        playfield.set_value(4, 6, 2);
-        playfield.set_value(4, 8, 4);
-        playfield.set_value(5, 1, 9);
-        playfield.set_value(5, 2, 7);
-        playfield.set_value(5, 3, 2);
-        playfield.set_value(5, 7, 6);
-        playfield.set_value(5, 8, 5);
-        playfield.set_value(6, 0, 5);
-        playfield.set_value(6, 2, 1);
-        playfield.set_value(6, 5, 2);
+        playfield.set_value(7, 0, 6);
+        playfield.set_value(9, 0, 8);
+        playfield.set_value(1, 1, 6);
+        playfield.set_value(1, 2, 3);
+        playfield.set_value(2, 2, 4);
+        playfield.set_value(6, 3, 4);
+        playfield.set_value(5, 4, 2);
+        playfield.set_value(8, 4, 3);
+        playfield.set_value(2, 4, 6);
+        playfield.set_value(4, 4, 8);
+        playfield.set_value(9, 5, 1);
+        playfield.set_value(7, 5, 2);
+        playfield.set_value(2, 5, 3);
+        playfield.set_value(6, 5, 7);
+        playfield.set_value(5, 5, 8);
+        playfield.set_value(5, 6, 0);
+        playfield.set_value(1, 6, 2);
+        playfield.set_value(2, 6, 5);
 
         assert!(playfield.multiple_solutions_(0) > 1);
     }
@@ -514,10 +544,10 @@ mod tests {
     fn test_set_value() {
         let playfield = &mut PlayfieldState::new();
 
-        playfield.set_value(0, 0, 1);
+        playfield.set_value(1, 0, 0);
         check(playfield, 0, 0, 1);
 
-        playfield.set_value(0, 0, 2);
+        playfield.set_value(2, 0, 0);
         check(playfield, 0, 0, 2);
 
         playfield.set_value(0, 0, 0);
@@ -539,12 +569,12 @@ mod tests {
         playfield.reset_value(7, 3);
         playfield.reset_value(8, 0);
 
-        playfield.set_value(7, 1, 5);
-        playfield.set_value(7, 1, 6);
-        playfield.set_value(7, 1, 7);
-        playfield.set_value(7, 1, 8);
-        playfield.set_value(7, 1, 9);
-        playfield.set_value(7, 1, 0);
+        playfield.set_value(5, 7, 1);
+        playfield.set_value(6, 7, 1);
+        playfield.set_value(7, 7, 1);
+        playfield.set_value(8, 7, 1);
+        playfield.set_value(9, 7, 1);
+        playfield.set_value(0, 7, 1);
 
         assert_eq!(playfield.get_possible_moves((7, 1)).unwrap(), vec![3,8]);
 
