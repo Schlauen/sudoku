@@ -293,7 +293,7 @@ impl PlayfieldState {
                 for mov_zero_based in moves {
                     self.set_value_(rcq, mov_zero_based);
         
-                    if self.solve_(cursor + 1) {
+                    if self.solve_random_(cursor + 1) {
                         return true;
                     }
 
@@ -610,3 +610,55 @@ mod tests {
         }
     }
 }
+
+// fn print(&self) {
+//     println!("_________");
+//     for i in 0..9 {
+//         print!("|");
+//         for j in 0..9 {
+//             let val = self.values[(i, j)];
+//             if val == 0 {
+//                 print!(" |");
+//             } else {
+//                 print!("{}|", val);
+//             }
+//         }
+//         print!("\n");
+//     }
+//     println!("");
+// }
+
+// fn get_weakest_clue(&self) -> Option<((usize, usize), usize)> {
+//     // returns the weakest existing clue first
+//     FIELDS.iter()
+//     .filter(|(rc, _)| self.values[*rc] > 0)
+//     .sorted_unstable_by_key(|rcq| {
+//         let ((r,c),q) = **rcq;
+//         let poss = self.poss_rows[r] & self.poss_cols[c] & self.poss_quads[q];
+//         - ((self.dof_rows[r] + self.dof_cols[c] + self.dof_quads[q] + poss.view_bits::<Lsb0>()[0..9].count_ones()) as i16)
+//     }).collect::<Vec<&((usize, usize), usize)>>().pop().map(|x| *x)
+// }
+
+// fn get_strongest_clue(&self, fields:[((usize, usize), usize); 81]) -> Option<(((usize, usize), usize), Vec<usize>)> {
+//     // returns the strongest clue of empty fields first
+//     fields.iter()
+//     .filter_map(|rcq| {
+//         let (rc, q) = *rcq;
+//         let value = self.values[rc];
+//         if value == 0 {
+//             let (r, c) = rc;
+//             let poss = self.poss_rows[r] & self.poss_cols[c] & self.poss_quads[q];
+//             let poss_vec = poss.view_bits::<Lsb0>()[0..9].iter_ones().collect::<Vec<usize>>();
+//             if poss_vec.is_empty() {
+//                 return None;
+//             }
+//             Some((*rcq, poss_vec))
+//         } else {
+//             None
+//         }
+//     })
+//     .sorted_unstable_by_key(|(rcq, poss): &(((usize, usize), usize), Vec<usize>)| {
+//         let ((r,c),q) = *rcq;
+//         self.dof_rows[r] + self.dof_cols[c] + self.dof_quads[q] + poss.len()
+//     }).collect::<Vec<(((usize, usize), usize), Vec<usize>)>>().pop()
+// }

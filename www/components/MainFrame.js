@@ -68,7 +68,7 @@ function Sidebar() {
     let range = document.createElement("input");
     range.type = 'range';
     range.min = 30;
-    range.max = 58;
+    range.max = 56;
     range.value = 45;
     range.className = 'slider';
     d1.appendChild(range);
