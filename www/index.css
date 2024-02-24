@@ -95,6 +95,10 @@ body {
     };
 }
 
+.cell.selected {
+    outline: 0.2rem solid var(--hover-color);
+}
+
 .cell.disabled {
     background-color: rgb(202, 206, 211);
 }
