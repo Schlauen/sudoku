@@ -1,14 +1,17 @@
-function Cell(row, col, getValue, setValue, updateCell) {
+function getValue(state, row, col) {
+    return state.get_value(row, col) || "";
+}
+
+function Cell(row, col, updateCell, state) {
     let cell = document.createElement("div");
-    cell.className = "cell enabled";
-    cell.setAttribute('row', row);
-    cell.setAttribute('col', col);
-    cell.innerHTML = getValue();
+    cell.id = row + ',' + col;
+    cell.cellState = -1;
+    //updateCell(row, col);
     cell.addEventListener("click", event => {
-        let value = getValue();
+        let value = getValue(state, row, col);
         let newValue = ((value || 0) + 1) % 10;
-        setValue(newValue);
-        updateCell(cell);
+        state.set_value(newValue, row, col);
+        updateCell(row, col);
     });
     
     return cell;

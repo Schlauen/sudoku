@@ -10,9 +10,8 @@ function Playfield(state, updateCell) {
             boxRow, boxCol,
             (row, col) => Cell(
                 row, col,
-                () => state.get_value(row, col) || "",
-                newValue => state.set_value(newValue, row, col),
-                updateCell
+                updateCell,
+                state,
             )
         )
     ));

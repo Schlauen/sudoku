@@ -2,14 +2,21 @@ import { PlayfieldState } from "wasm-sudoku";
 import Button from "./Button";
 import Playfield from "./Playfield";
 import Footer from "./Footer";
+import GenericBox from "./GenericBox";
 
+const CellState = {
+    Blank: 0,
+    Fix: 1,
+    Set: 2,
+    Error: 3,
+}
 const state = PlayfieldState.new();
 var selectedCell = {
     row: 0,
     col: 0
 }
 var spacePressed = false;
-console.log('new state');
+console.log('new playfield');
 
 document.addEventListener('keydown', (e) => {
     if (e.code === "Space") spacePressed = true;
@@ -18,55 +25,128 @@ document.addEventListener('keydown', (e) => {
 document.addEventListener('keyup', (e) => { 
     if (e.code === "Space") spacePressed = false;
 
-    if (e.code === "ArrowUp" || e.code === "KeyW") selectedCell.row = Math.max(0, selectedCell.row - 1);
-    else if (e.code === "ArrowDown" || e.code === "KeyS") selectedCell.row = Math.min(8, selectedCell.row + 1);
-    else if (e.code === "ArrowLeft" || e.code === "KeyA") selectedCell.col = Math.max(0, selectedCell.col - 1);
-    else if (e.code === "ArrowRight" || e.code === "KeyD") selectedCell.col = Math.min(8, selectedCell.col + 1);
-    else if (spacePressed && digitPessed(e, 1)) console.log("Hallo Ursin.");
-    else if (digitPessed(e, 1)) state.set_value(1, selectedCell.row, selectedCell.col);
-    else if (digitPessed(e, 2)) state.set_value(2, selectedCell.row, selectedCell.col);
-    else if (digitPessed(e, 3)) state.set_value(3, selectedCell.row, selectedCell.col);
-    else if (digitPessed(e, 4)) state.set_value(4, selectedCell.row, selectedCell.col);
-    else if (digitPessed(e, 5)) state.set_value(5, selectedCell.row, selectedCell.col);
-    else if (digitPessed(e, 6)) state.set_value(6, selectedCell.row, selectedCell.col);
-    else if (digitPessed(e, 7)) state.set_value(7, selectedCell.row, selectedCell.col);
-    else if (digitPessed(e, 8)) state.set_value(8, selectedCell.row, selectedCell.col);
-    else if (digitPessed(e, 9)) state.set_value(9, selectedCell.row, selectedCell.col);
-    else if (e.code === "Delete" || digitPessed(e, 0)) state.reset_value(selectedCell.row, selectedCell.col);
-  
-    updateCells();
+    if (e.code === "ArrowUp" || e.code === "KeyW") {
+        let oldRow = selectedCell.row;
+        selectedCell.row = Math.max(0, selectedCell.row - 1);
+        updateCell(oldRow, selectedCell.col);
+        updateSelectedCell();
+    }
+    else if (e.code === "ArrowDown" || e.code === "KeyS") {
+        let oldRow = selectedCell.row;
+        selectedCell.row = Math.min(8, selectedCell.row + 1);
+        updateCell(oldRow, selectedCell.col);
+        updateSelectedCell();
+    }
+    else if (e.code === "ArrowLeft" || e.code === "KeyA") {
+        let oldCol = selectedCell.col;
+        selectedCell.col = Math.max(0, selectedCell.col - 1);
+        updateCell(selectedCell.row, oldCol);
+        updateSelectedCell();
+    }
+    else if (e.code === "ArrowRight" || e.code === "KeyD") {
+        let oldCol = selectedCell.col;
+        selectedCell.col = Math.min(8, selectedCell.col + 1);
+        updateCell(selectedCell.row, oldCol);
+        updateSelectedCell();
+    }
+    else if (spacePressed && digitPessed(e, 1)) toggleNote(1);
+    else if (spacePressed && digitPessed(e, 2)) toggleNote(2);
+    else if (spacePressed && digitPessed(e, 3)) toggleNote(3);
+    else if (spacePressed && digitPessed(e, 4)) toggleNote(4);
+    else if (spacePressed && digitPessed(e, 5)) toggleNote(5);
+    else if (spacePressed && digitPessed(e, 6)) toggleNote(6);
+    else if (spacePressed && digitPessed(e, 7)) toggleNote(7);
+    else if (spacePressed && digitPessed(e, 8)) toggleNote(8);
+    else if (spacePressed && digitPessed(e, 9)) toggleNote(9);
+    else if (digitPessed(e, 1)) setValue(1);
+    else if (digitPessed(e, 2)) setValue(2);
+    else if (digitPessed(e, 3)) setValue(3);
+    else if (digitPessed(e, 4)) setValue(4);
+    else if (digitPessed(e, 5)) setValue(5);
+    else if (digitPessed(e, 6)) setValue(6);
+    else if (digitPessed(e, 7)) setValue(7);
+    else if (digitPessed(e, 8)) setValue(8);
+    else if (digitPessed(e, 9)) setValue(9);
+    else if (e.code === "Delete" || digitPessed(e, 0)) setValue(0);
 });
+
+function toggleNote(value) {
+    let note = document.getElementById(selectedCell.row + "," + selectedCell.col + "," + (value-1));
+    if (!note) {
+        return;
+    }
+    if (note.innerHTML === '') {
+        note.innerHTML = value;
+    } else {
+        note.innerHTML = '';
+    }
+}
+
+function setValue(value) {
+    state.set_value(value, selectedCell.row, selectedCell.col);
+    updateSelectedCell();
+}
 
 function digitPessed(event, digit) {
     return event.code === "Digit" + digit || event.code === "Numpad" + digit;
 }
 
-function updateCells() {
-    let cells = document.getElementsByClassName("cell");
-    Array.from(cells).forEach((cell) => updateCell(cell));
+function getCell(row, col) {
+    let id = row + "," + col;
+    return document.getElementById(id);
 }
 
-function updateCell(cell) {
-    let row = cell.getAttribute("row");
-    let col = cell.getAttribute("col");
-
-    cell.innerHTML = state.get_value(row, col) || "";
-
-    let className = 'cell';
-    if (selectedCell.row == row && selectedCell.col == col) {
-        className += ' selected';
+function updateCells() {
+    for (let i = 0; i < 9; i += 1) {
+        for (let j = 0; j < 9; j += 1) {
+            updateCell(i, j);
+        }   
     }
+}
 
-    if (state.is_fix(row, col)) {
-        className += ' disabled';
-    } else {
-        if (state.get_show_errors() && state.is_error(row, col)) {
-            className += ' error';
-        } else {
-            className += ' enabled';
+function updateSelectedCell() {
+    updateCell(selectedCell.row, selectedCell.col);
+}
+
+function updateCell(row, col) {
+    let cell = getCell(row, col);
+    let nextCellState = state.get_cell_state(row, col);
+    let currentCellState = cell.cellState;
+    let updateValue = () => cell.innerHTML = state.get_value(row, col) || "";
+
+    if (nextCellState == CellState.Blank) {
+        cell.className = 'cell box enabled';
+
+        if (currentCellState != CellState.Blank) {
+            cell.innerHTML = '';
+            for (let i = 0; i < 9; i += 1) {
+                let miniCell = document.createElement("div");
+                miniCell.id = cell.id + "," + i;
+                miniCell.className = "mini-cell";
+                miniCell.innerHTML = '';
+                cell.appendChild(miniCell);
+            }
         }
+        
+        //cell.className = 'cell box enabled';
     }
-    cell.className = className;
+    else if (nextCellState == CellState.Fix) {
+        cell.className = 'cell disabled';
+        updateValue();
+    }
+    else if (nextCellState == CellState.Set) {
+        cell.className = 'cell enabled';
+        updateValue();
+    }
+    else if (nextCellState == CellState.Error) {
+        cell.className = 'cell error';
+        updateValue();
+    }
+
+    if (selectedCell.row == row && selectedCell.col == col) {
+        cell.className += ' selected';
+    }
+    cell.cellState = nextCellState;
 }
 
 function Sidebar() {
@@ -129,6 +209,7 @@ function Sidebar() {
             'reset',
             () => {
                 state.reset();
+                Array.from(document.getElementsByClassName('cell')).forEach(cell => cell.cellState = -1);
                 updateCells();
             }
         )

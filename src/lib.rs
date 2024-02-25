@@ -39,17 +39,25 @@ const VALUES_BIN_INV:[u16;9] = [
     0b1111111011111111,
 ];
 
+#[wasm_bindgen]
+#[repr(u8)]
+#[derive(Clone, Copy)]
+pub enum CellState {
+    Blank,
+    Fix,
+    Set,
+    Error,
+}
+
 // if changed, apply 'wasm-pack build'
 #[wasm_bindgen]
 pub struct PlayfieldState {
     values: Array2D<u8>,
-    errors: Array2D<bool>,
     solution: Option<Array2D<u8>>,
-    fixed: Array2D<bool>,
+    states: Array2D<CellState>,
     poss_rows: [u16; 9],
     poss_cols: [u16; 9],
     poss_quads: [u16; 9],
-    solved: bool,
     show_errors: bool,
     status_text: String,
 }
@@ -59,13 +67,11 @@ impl PlayfieldState {
     pub fn new() -> PlayfieldState {
         PlayfieldState { 
             values: Array2D::filled_with(0, 9, 9),
-            errors: Array2D::filled_with(false, 9, 9),
             solution: Option::None,
-            fixed: Array2D::filled_with(false, 9, 9),
+            states: Array2D::filled_with(CellState::Blank, 9, 9),
             poss_rows: [0b1111111111111111u16; 9],
             poss_cols: [0b1111111111111111u16; 9],
             poss_quads: [0b1111111111111111u16; 9],
-            solved: false,
             show_errors: false,
             status_text: format!(""),
         }
@@ -73,46 +79,45 @@ impl PlayfieldState {
 
     pub fn reset(&mut self) {
         self.values = Array2D::filled_with(0, 9, 9);
-        self.errors = Array2D::filled_with(false, 9, 9);
         self.solution = Option::None;
-        self.fixed = Array2D::filled_with(false, 9, 9);
+        self.states = Array2D::filled_with(CellState::Blank, 9, 9);
         self.poss_rows = [0b1111111111111111u16; 9];
         self.poss_cols = [0b1111111111111111u16; 9];
         self.poss_quads = [0b1111111111111111u16; 9];
-        self.solved = false;
         self.show_errors = false;
         self.status_text = format!("");
     }
 
     pub fn set_value(&mut self, value:u8, row:usize, col:usize) {
         let rc = (row, col);
-        if self.fixed[rc] {
-            return;
-        }
 
-        if value == 0 {
-            self.reset_value(row, col);
-            return;
-        }
-
-        let current_val = self.values[rc];
-        if current_val > 0 {
-            self.reset_value(row, col);
-        }
-
-        let mov_zero_based = (value - 1) as usize;
-        match self.get_possible_moves(rc) {
-            Some(moves) => {
-                if moves.contains(&mov_zero_based) {
-                    self.set_value_((rc, QUADS[row][col]), mov_zero_based);
-                } else {
-                    self.errors[rc] = true;
-                    self.values[rc] = value;
+        match self.states[rc] {
+            CellState::Fix => {},
+            CellState::Error | CellState::Blank | CellState::Set => {
+                if value == 0 {
+                    self.reset_value(row, col);
+                    return;
                 }
-            },
-            None => {
-                self.errors[rc] = true;
-                self.values[rc] = value;
+        
+                let current_val = self.values[rc];
+                if current_val > 0 {
+                    self.reset_value(row, col);
+                }
+        
+                let mov_zero_based = (value - 1) as usize;
+                match self.get_possible_moves(rc) {
+                    Some(moves) => {
+                        if moves.contains(&mov_zero_based) {
+                            self.set_value_((rc, QUADS[row][col]), mov_zero_based);
+                        } else {
+                            self.values[rc] = value;
+                        }
+                    },
+                    None => {
+                        self.values[rc] = value;
+                    }
+                }
+                self.update_state(row, col);
             }
         }
     }
@@ -121,17 +126,20 @@ impl PlayfieldState {
         self.values[(row, col)]
     }
 
-    pub fn is_error(&self, row:usize, col:usize) -> bool {
-        let error = self.errors[(row, col)];
+    pub fn get_cell_state(&self, row:usize, col:usize) -> CellState {
+        self.states[(row, col)]
+    }
+
+    fn is_error(&self, row:usize, col:usize) -> bool {
         match self.solution.as_ref() {
-            None => error,
+            None => false,
             Some(s) => {
                 let val = self.values[(row, col)];
                 if val == 0 {
-                    error
+                    false
                 } else {
                     if s[(row, col)] == val {
-                        error
+                        false
                     } else {
                         true
                     }
@@ -140,16 +148,18 @@ impl PlayfieldState {
         }
     }
 
-    pub fn is_fix(&self, row:usize, col:usize) -> bool {
-        self.fixed[(row, col)]
-    }
-
-    pub fn get_show_errors(&self) -> bool {
-        self.show_errors
-    }
-
     pub fn toggle_show_errors(&mut self) {
         self.show_errors = !self.show_errors; 
+
+        if self.show_errors {
+            for row in 0..9 {
+                for col in 0..9 {
+                    if self.is_error(row, col) {
+                        self.states[(row, col)] = CellState::Error;
+                    }
+                }
+            }
+        }
     }
 
     pub fn generate(&mut self, difficulty:u8) {
@@ -178,49 +188,67 @@ impl PlayfieldState {
 
         self.solution = Option::Some(solution);
 
-        for i in 0..9 {
-            for j in 0..9 {
-                let val = values[(i,j)];
+        for row in 0..9 {
+            for col in 0..9 {
+                let rc = (row, col);
+                let val = values[rc];
                 if val == 0 {
-                    self.fixed[(i, j)] = false;
+                    self.states[rc] = CellState::Blank;
                     continue;
                 }
                 let random_val = values_random_mask[(val - 1) as usize];
-                self.set_value(random_val, i, j);
-                self.fixed[(i, j)] = true;
+                self.set_value(random_val, row, col);
+                self.states[rc] = CellState::Fix;
             }
         }
     }
 
     pub fn reset_value(&mut self, row:usize, col:usize) {
         let rc = (row, col);
-        if self.fixed[rc] {
-            return;
-        }
+        match self.states[rc] {
+            CellState::Blank | CellState::Fix => {},
+            CellState::Error | CellState::Set => {
+                let current_val = self.values[rc];
 
-        let current_val = self.values[rc];
+                if current_val == 0 {
+                    return;
+                }
 
-        if current_val == 0 {
-            return;
-        }
-
-        if self.errors[rc] {
-            self.errors[rc] = false;
-            self.fixed[rc] = false;
-            self.values[rc] = 0;
-            return;
-        }
-
-        let quad = QUADS[row][col] as usize;
-        let mov_zero_based = (current_val - 1) as usize;
-        self.reset_value_((rc, quad), mov_zero_based)
+                let quad = QUADS[row][col] as usize;
+                let mov_zero_based = (current_val - 1) as usize;
+                self.reset_value_((rc, quad), mov_zero_based);
+                self.update_state(row, col);
+            }
+        }        
     }
 
     pub fn solve(&mut self) {   
         if self.check_error() {
             return;
         };     
-        self.solved = self.solve_(0);
+        self.solve_(0);
+        
+        self.solution = Option::Some(self.values.clone());
+        for row in 0..9 {
+            for col in 0..9 {
+                let new_state = match self.states[(row, col)] {
+                    CellState::Blank | CellState::Error | CellState::Set => CellState::Set,
+                    CellState::Fix => CellState::Fix
+                };
+                self.states[(row, col)] = new_state;
+            }
+        }
+    }
+
+    fn update_state(&mut self, row:usize, col:usize) {
+        let rc = (row, col);
+        if self.is_error(row, col) && self.show_errors {
+            self.states[rc] = CellState::Error;
+        } else if self.values[rc] > 0 {
+            self.states[rc] = CellState::Set;
+        } else {
+            self.states[rc] = CellState::Blank;
+        }
     }
 
     fn check_error(&mut self) -> bool {
