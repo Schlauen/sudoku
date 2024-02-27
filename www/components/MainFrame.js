@@ -1,8 +1,7 @@
 import { PlayfieldState } from "wasm-sudoku";
-import Button from "./Button";
 import Playfield from "./Playfield";
 import Footer from "./Footer";
-import GenericBox from "./GenericBox";
+import Sidebar from "./Sidebar";
 
 const CellState = {
     Blank: 0,
@@ -96,14 +95,6 @@ function getCell(row, col) {
     return document.getElementById(id);
 }
 
-function updateCells() {
-    for (let i = 0; i < 9; i += 1) {
-        for (let j = 0; j < 9; j += 1) {
-            updateCell(i, j);
-        }   
-    }
-}
-
 function updateSelectedCell() {
     updateCell(selectedCell.row, selectedCell.col);
 }
@@ -127,8 +118,6 @@ function updateCell(row, col) {
                 cell.appendChild(miniCell);
             }
         }
-        
-        //cell.className = 'cell box enabled';
     }
     else if (nextCellState == CellState.Fix) {
         cell.className = 'cell disabled';
@@ -149,88 +138,10 @@ function updateCell(row, col) {
     cell.cellState = nextCellState;
 }
 
-function Sidebar() {
-    let sidebar = document.createElement("div");
-    sidebar.id = 'sidebar';
-
-    let d3 = document.createElement("div");
-    d3.className = 'checkboxcontainer';
-    let d4 = document.createElement("label");
-    d4.innerHTML = 'show errors';
-    d4.className = 'spring';
-    d3.appendChild(d4);
-    sidebar.appendChild(d3);
-
-    let checkbox = document.createElement("div");
-    checkbox.className = 'custom-checkbox';
-    d3.appendChild(checkbox);
-    let tick = document.createElement("div");
-    tick.className = 'tick';
-    let checked = false;
-    checkbox.onclick = () => {
-        state.toggle_show_errors();
-        updateCells();
-        if (checked) {
-            checked = false;
-            checkbox.removeChild(tick);
-        } else {
-            checked = true;
-            checkbox.appendChild(tick);
-        }
-    };
-    
-    let d1 = document.createElement("div");
-    d1.className = 'rangecontainer';
-    let d2 = document.createElement("label");
-    d2.innerHTML = 'level';
-    d1.appendChild(d2);
-    sidebar.appendChild(d1);
-
-    let range = document.createElement("input");
-    range.type = 'range';
-    range.min = 30;
-    range.max = 56;
-    range.value = 45;
-    range.className = 'slider';
-    d1.appendChild(range);
-
-    sidebar.appendChild(
-        Button(
-            'generate',
-            () => {
-                console.log(range.value);
-                state.generate(range.value);
-                updateCells();
-            }
-        )
-    );
-    sidebar.appendChild(
-        Button(
-            'reset',
-            () => {
-                state.reset();
-                Array.from(document.getElementsByClassName('cell')).forEach(cell => cell.cellState = -1);
-                updateCells();
-            }
-        )
-    );
-    sidebar.appendChild(
-        Button(
-            'solve',
-            () => {
-                state.solve();
-                updateCells();
-            }
-        )
-    );
-
-    return sidebar;
-}
-
 function MainFrame() {
     let mainFrame = document.createElement("div");
     mainFrame.id = 'main-frame';
-    mainFrame.appendChild(Sidebar());
+    mainFrame.appendChild(Sidebar(state, updateCell));
     mainFrame.appendChild(Playfield(state, updateCell));
     mainFrame.appendChild(Footer());
     return mainFrame;

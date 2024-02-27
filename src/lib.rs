@@ -171,33 +171,22 @@ impl PlayfieldState {
         if !self.solve_random_(0) {
             panic!("No solution found");
         }
-        let mut solution = self.values.clone();
+        self.solution = Option::Some(self.values.clone());
+
         let cursor_random_mask = self.generate_seed();
         
         if !self.generate_(&cursor_random_mask, 0, 0, difficulty) {
             panic!("No solution generated");
         }
 
-        let values = self.values.clone();
-        for i in 0..9 {
-            for j in 0..9 {
-                solution[(i,j)] = values_random_mask[(solution[(i,j)] - 1) as usize];
-                self.reset_value(i,j);
-            }
-        }
-
-        self.solution = Option::Some(solution);
-
         for row in 0..9 {
             for col in 0..9 {
                 let rc = (row, col);
-                let val = values[rc];
+                let val = self.values[rc];
                 if val == 0 {
                     self.states[rc] = CellState::Blank;
                     continue;
                 }
-                let random_val = values_random_mask[(val - 1) as usize];
-                self.set_value(random_val, row, col);
                 self.states[rc] = CellState::Fix;
             }
         }
