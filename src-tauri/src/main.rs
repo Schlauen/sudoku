@@ -4,6 +4,7 @@
 mod state;
 use std::sync::Mutex;
 use state::{CellState, Playfield};
+use rand::prelude::*;
 
 #[derive(serde::Serialize)]
 struct Cell {
@@ -73,7 +74,7 @@ fn generate(
     state: tauri::State<'_, PlayfieldState>,
     difficulty: u8,
 ) -> Result<u8, String> {
-    state.playfield.lock().unwrap().generate(difficulty).map(|game_state| game_state as u8)
+    state.playfield.lock().unwrap().generate(difficulty, thread_rng().next_u64()).map(|game_state| game_state as u8)
 }
 
 #[tauri::command]
