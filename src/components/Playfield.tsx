@@ -8,12 +8,7 @@ interface Key {
     key:string;
 }
 
-interface Props {
-    onError: (message:string) => void;
-    setGameState: (newState:number) => void;
-}
-
-const Playfield = forwardRef(({onError, setGameState} : Props, ref) => {
+const Playfield = forwardRef((_, ref) => {
     const [focus, setFocus] = useState(40);
     const [spacePressed, setSpacePressed] = useState(false);
     
@@ -43,13 +38,12 @@ const Playfield = forwardRef(({onError, setGameState} : Props, ref) => {
     const setValue = (digit:number) => cells[focus].current.setValue(digit);
 
     function keyDownHandler({key}:Key) {
-        
-        if (key === " ") setSpacePressed(true);
+        if (key === "Control") setSpacePressed(true);
     };
 
     function keyUpHandler({key}:Key) {
         console.log(key);
-        if (key === " ") setSpacePressed(false);
+        if (key === "Control") setSpacePressed(false);
 
         if (key === "ArrowDown" || key === "s") {
             let newFocus = focus + (focusRow() >= 8 ? 0 : 9);
@@ -103,9 +97,7 @@ const Playfield = forwardRef(({onError, setGameState} : Props, ref) => {
                         keyPrefix='box:'
                         childFactory={
                             (row, col) => <Cell 
-                                row={row} col={col} 
-                                onError={onError}
-                                setGameState={setGameState}
+                                row={row} col={col}
                                 ref={cells[row*9 + col]}
                             />
                         }

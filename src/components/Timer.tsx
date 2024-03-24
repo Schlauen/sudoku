@@ -1,38 +1,28 @@
 import { forwardRef, useEffect, useImperativeHandle, useState } from 'react'
-
-const State = {
-    Running: 0,
-    Stop: 1,
-    Reset: 2,
-}
+import { useStore, State } from '../store';
 
 const Timer = forwardRef((_, ref) => {
     const [time, setTime] = useState('00:00:00');
-    const [state, setState] = useState(State.Reset);
     const [startTime, setStartTime] = useState(new Date().getTime());
 
     const start = () => {
-        setState(State.Running);
         setStartTime(new Date().getTime());
         setTime('00:00:00');
     }
-    const stop = () => setState(State.Stop);
-    const reset = () => {
-        setState(State.Reset);
-        setTime('00:00:00');
-    }
+
     useImperativeHandle(ref, () => {
         return {
             start:start,
-            stop:stop,
-            reset:reset,
         };
     });
 
+    const gameState = useStore(state => state.gameState);
+    
     useEffect(() => {
         const interval = setInterval(
             function() {
-                if (state == State.Running) {
+                
+                if (gameState == State.Running || gameState == State.Error) {
                     let now = new Date().getTime();
                     let distance = now - startTime;
     
@@ -50,8 +40,8 @@ const Timer = forwardRef((_, ref) => {
                         clearInterval(interval);
                         setTime("EXPIRED");
                     };
-                } else if (state == State.Stop) {
-                } else if (state == State.Reset) {
+                } else if (gameState == State.Solved) {
+                } else if (gameState == State.Blank) {
                     setTime('00:00:00');
                 }
             }, 

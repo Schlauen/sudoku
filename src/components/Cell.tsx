@@ -1,6 +1,7 @@
 import { forwardRef, useImperativeHandle, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/tauri";
 import MiniCell from "./MiniCell";
+import { useStore } from '../store';
 
 const State = {
     Blank: 0,
@@ -13,8 +14,6 @@ const State = {
 interface Props {
     row: number;
     col: number;
-    onError:(message: string) => void;
-    setGameState:(newState:number) => void;
 }
 
 interface CellState {
@@ -23,7 +22,7 @@ interface CellState {
     game_state:number;
 }
 
-const Cell = forwardRef(({ row, col, onError, setGameState }: Props, ref) => {
+const Cell = forwardRef(({ row, col }: Props, ref) => {
     const [state, setState] = useState(State.Blank);
     const [value, setValue] = useState(0);
     const [focus, setFocus] = useState(false);
@@ -57,11 +56,14 @@ const Cell = forwardRef(({ row, col, onError, setGameState }: Props, ref) => {
 
         return className;
     }
-    
+
+    const changeGameState = useStore((state) => state.changeGameState);
+    const onError = useStore((state) => state.changeMessage);
+
     const updateCell = (cell:CellState) => {
         setValue(cell.value);
         setState(cell.state);
-        setGameState(cell.game_state);
+        changeGameState(cell.game_state);
     }
 
     const update = () => invoke<CellState>('get_cell_state', {row:row, col:col})

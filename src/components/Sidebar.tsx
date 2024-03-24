@@ -4,17 +4,19 @@ import Button from './Button'
 import { invoke } from "@tauri-apps/api/tauri";
 import Timer from './Timer';
 import Range from './Range';
+import { useStore } from '../store';
 
 
 interface Props {
     updatePlayfield: () => void;
-    onError: (message:string) => void;
 }
 
-const Sidebar = ({updatePlayfield, onError} : Props) => {
+const Sidebar = ({updatePlayfield} : Props) => {
     const showErrorsRef = useRef<any>(null);
     const timerRef = useRef<any>(null);
     const rangeRef = useRef<any>(null);
+    const onError = useStore(state => state.changeMessage);
+    
     return (
         <div id='sidebar'>
             <Checkbox 
@@ -31,7 +33,6 @@ const Sidebar = ({updatePlayfield, onError} : Props) => {
             <Button
                 name='generate'
                 onClick={() => invoke('generate', {difficulty:rangeRef.current.getValue()}).then((_) => {
-                    timerRef.current.stop();
                     updatePlayfield();
                     timerRef.current.start();
                 })
@@ -39,17 +40,14 @@ const Sidebar = ({updatePlayfield, onError} : Props) => {
             />
             <Button
                 name='solve'
-                onClick={() => invoke('solve').then((_) => {
-                    updatePlayfield();
-                    timerRef.current.stop();
-                })
+                onClick={() => invoke('solve').then((_) => updatePlayfield())
                 .catch(onError)}
             />
             <Button
                 name='reset'
                 onClick={() => invoke('reset').then((_) => {
                     updatePlayfield();
-                    timerRef.current.reset();
+                    timerRef.current.start();
                 })
                 .catch(onError)}
             />
