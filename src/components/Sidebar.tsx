@@ -5,13 +5,49 @@ import { invoke } from "@tauri-apps/api/tauri";
 import Timer from './Timer';
 import Range from './Range';
 import { useStore } from '../store';
-
+import { BaseDirectory, createDir, writeTextFile, exists } from "@tauri-apps/api/fs";
+import { join, appDataDir } from '@tauri-apps/api/path';
 
 interface Props {
     updatePlayfield: () => void;
+    setOpenModal: (open:boolean) => void;
 }
 
-const Sidebar = ({updatePlayfield} : Props) => {
+const createDataFolder = async () => {
+    const savegames = "savegames";
+    const ex = await exists(savegames, {dir: BaseDirectory.AppData});
+    if (ex) {
+        return;
+    }
+    try {
+        await createDir(savegames, {
+            dir: BaseDirectory.AppData,
+            recursive: true,
+        });
+    } catch (e) {
+        console.error(e);
+    }
+};
+
+const createDataFile = async (name:string, content:string) => {
+    createDataFolder();
+    const path = await join("savegames", name + '.json');
+    try {
+      await writeTextFile(
+        {
+          contents: content,
+          path: path,
+        },
+        {
+            dir: BaseDirectory.AppData
+        },
+      );
+    } catch (e) {
+      console.log(e);
+    }
+};
+
+const Sidebar = ({updatePlayfield, setOpenModal} : Props) => {
     const showErrorsRef = useRef<any>(null);
     const timerRef = useRef<any>(null);
     const rangeRef = useRef<any>(null);
@@ -50,6 +86,16 @@ const Sidebar = ({updatePlayfield} : Props) => {
                     timerRef.current.start();
                 })
                 .catch(onError)}
+            />
+            <Button
+                name='load'
+                onClick={() => setOpenModal(true)}
+            />
+            <Button
+                name='save'
+                onClick={() => invoke<string>('serialize')
+                    .then((content: string) => createDataFile(new Date().getTime().toString(), content))
+                }
             />
             <Timer ref={timerRef}/>
         </div>

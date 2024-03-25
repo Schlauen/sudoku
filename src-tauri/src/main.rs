@@ -44,6 +44,24 @@ fn enhance_cell_state(show_errors:bool, cell_state:CellState) -> EnhancedCellSta
 }
 
 #[tauri::command]
+fn serialize(
+    state: tauri::State<'_, PlayfieldState>,
+) -> Result<String,String> {
+    let playfield = state.playfield.lock().unwrap();
+    playfield.to_json().map_err(|_| "serialization failed".into())
+}
+
+#[tauri::command]
+fn deserialize(
+    state: tauri::State<'_, PlayfieldState>,
+    msg: String
+) -> Result<u8, String> {
+    let mut playfield = state.playfield.lock().unwrap();
+    *playfield = Playfield::from_json(&msg);
+    Ok(playfield.get_game_state() as u8)
+}
+
+#[tauri::command]
 fn get_cell_state(
     state: tauri::State<'_, PlayfieldState>,
     row:usize, col:usize
@@ -150,6 +168,8 @@ fn main() {
             solve,
             get_game_state,
             toggle_show_errors,
+            serialize,
+            deserialize
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

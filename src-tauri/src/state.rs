@@ -2,6 +2,8 @@
 use array2d::Array2D;
 use bitvec::prelude::*;
 use rand::prelude::*;
+use serde::{Serialize, Deserialize};
+use serde_json;
 
 // (row, col, quad) triplets
 const FIELDS:[((usize, usize), usize); 81] = [
@@ -39,7 +41,8 @@ const VALUES_BIN_INV:[u16;9] = [
     0b1111111011111111,
 ];
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Serialize, Deserialize, Debug)]
+#[repr(u8)]
 pub enum CellState {
     Blank,
     Fix,
@@ -47,7 +50,21 @@ pub enum CellState {
     Error,
 }
 
-#[derive(Clone, Copy)]
+impl TryFrom<u8> for CellState {
+    type Error = ();
+
+    fn try_from(v: u8) -> Result<Self, <CellState as TryFrom<u8>>::Error> {
+        match v {
+            x if x == CellState::Blank as u8 => Ok(CellState::Blank),
+            x if x == CellState::Fix as u8 => Ok(CellState::Fix),
+            x if x == CellState::Set as u8 => Ok(CellState::Set),
+            x if x == CellState::Error as u8 => Ok(CellState::Error),
+            _ => Err(()),
+        }
+    }
+}
+
+#[derive(Clone, Copy, Serialize, Deserialize)]
 pub enum GameState {
     Blank,
     Running,
@@ -55,10 +72,116 @@ pub enum GameState {
     Error,
 }
 
+#[derive(Serialize, Deserialize)]
+struct SerializableArray2D(#[serde(with = "array2d_as_string")] Array2D<u8>);
+mod array2d_as_string {
+    use array2d::Array2D;
+    use serde::{Deserialize, Serializer, Deserializer};
+
+    pub fn serialize<S>(arr: &Array2D<u8>, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_str(&format!("{:?}", arr.as_row_major()).replace(" ", ""))
+    }
+    
+    pub fn deserialize<'de, D>(deserializer: D) -> Result<Array2D<u8>, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        Array2D::from_row_major(
+            &s
+                .replace("[", "")
+                .replace("]", "")
+                .split(',')
+                .map(|x| x.parse::<u8>().unwrap())
+                .collect::<Vec<u8>>(),
+                9,
+                9
+            ).map_err(serde::de::Error::custom)
+    }
+}
+
+#[derive(Serialize, Deserialize)]
+struct SerializableArray2DOption(#[serde(with = "array2d_option_as_string")] Option<Array2D<u8>>);
+mod array2d_option_as_string {
+    use array2d::Array2D;
+    use serde::{Deserialize, Serializer, Deserializer};
+
+    pub fn serialize<S>(arr: &Option<Array2D<u8>>, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let s = arr.clone().map(|a| format!("{:?}", a.as_row_major()).replace(" ", "")).unwrap_or("".into());
+        serializer.serialize_str(&s)
+    }
+    
+    pub fn deserialize<'de, D>(deserializer: D) -> Result<Option<Array2D<u8>>, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        String::deserialize(deserializer).map(|s| Array2D::from_row_major(
+            &s
+                .replace("[", "")
+                .replace("]", "")
+                .split(',')
+                .map(|x| x.parse::<u8>().unwrap())
+                .collect::<Vec<u8>>(),
+                9,
+                9
+            ).ok()).map_err(serde::de::Error::custom)
+    }
+}
+
+#[derive(Serialize, Deserialize)]
+struct SerializableArray2DE(#[serde(with = "array2d_e_as_string")] Array2D<CellState>);
+mod array2d_e_as_string {
+    use array2d::Array2D;
+    use serde::{Deserialize, Serializer, Deserializer};
+
+    use super::CellState;
+    
+    pub fn serialize<S>(arr: &Array2D<CellState>, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_str(&format!(
+            "{:?}", 
+            arr.as_row_major().iter().map(|e| *e as u8).collect::<Vec<u8>>()
+        ).replace(" ", ""))
+    }
+    
+    pub fn deserialize<'de, D>(deserializer: D) -> Result<Array2D<CellState>, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        Array2D::from_row_major(
+            &s
+                .replace("[", "")
+                .replace("]", "")
+                .split(',')
+                .map(|x| CellState::try_from(x.parse::<u8>().unwrap()).unwrap())
+                .collect::<Vec<CellState>>(),
+                9,
+                9
+            ).map_err(serde::de::Error::custom)
+    }
+}
+
+#[derive(Serialize, Deserialize)]
 pub struct Playfield {
+
+    #[serde(with = "array2d_as_string")]
     values: Array2D<u8>,
+
+    #[serde(with = "array2d_option_as_string", skip_serializing_if = "Option::is_none")]
     solution: Option<Array2D<u8>>,
+
+    #[serde(with = "array2d_e_as_string")]
     states: Array2D<CellState>,
+
     poss_rows: [u16; 9],
     poss_cols: [u16; 9],
     poss_quads: [u16; 9],
@@ -67,6 +190,10 @@ pub struct Playfield {
 }
 
 impl Playfield {
+    pub fn from_json(string: &str) -> Playfield {
+        serde_json::from_str(string).unwrap()
+    }
+
     pub fn new() -> Playfield {
         Playfield { 
             values: Array2D::filled_with(0, 9, 9),
@@ -78,6 +205,10 @@ impl Playfield {
             show_errors: false,
             state: GameState::Blank,
         }
+    }
+
+    pub fn to_json(&self) -> Result<String, serde_json::Error> {
+        serde_json::to_string(&self)
     }
 
     pub fn reset(&mut self) -> Result<GameState, String> {
@@ -516,6 +647,22 @@ mod tests {
         let _ = playfield.generate(58, 42);
         let elapsed = now.elapsed();
         println!("Elapsed: {:.2?}", elapsed);
+    }
+
+    #[test]
+    fn test_format() {
+        let arr = Array2D::filled_with(0, 3, 3);
+        let serialized = format!("{:?}", arr.as_row_major()).replace(" ", "");
+        assert_eq!(serialized, "[0,0,0,0,0,0,0,0,0]");
+        let deserialized = Array2D::from_row_major(
+            &serialized
+            .replace("[", "")
+            .replace("]", "")
+            .split(',')
+            .map(|x| x.parse::<u8>().unwrap())
+            .collect::<Vec<u8>>(),
+            3,3).unwrap();
+        assert_eq!(deserialized, Array2D::from_row_major(&vec![0,0,0,0,0,0,0,0,0], 3, 3).unwrap());
     }
 
     #[test]
