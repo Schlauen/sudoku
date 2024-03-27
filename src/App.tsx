@@ -1,9 +1,11 @@
-import { useRef, useState } from "react";
+import { useState } from "react";
 import "./App.css";
 import MainFrame from "./components/MainFrame";
-import SettingsModal from "./components/SettingsModal";
-import { BaseDirectory, createDir, writeFile, readTextFile, readDir } from "@tauri-apps/api/fs";
-import { join, appDataDir } from '@tauri-apps/api/path';7
+import LoadingModal from "./components/LoadingModal";
+import { BaseDirectory, readDir } from "@tauri-apps/api/fs";
+import GenerateModal from "./components/GenerateModal";
+import { useStore } from "./store";
+import SaveModal from "./components/SaveModal";
 
 const getEntries = async () => {
   const entries = await readDir("savegames", { dir: BaseDirectory.AppData, recursive: false });
@@ -11,18 +13,48 @@ const getEntries = async () => {
 }
 
 function App() {
-  const [openModal, setOpenModal] = useState(false);
-  const mainFrame = useRef<any>(null);
-  const update = () => mainFrame.current.update();
+  const [openLoadingModal, setOpenLoadingModal] = useState(false);
+  const [openGenerateModal, setOpenGenerateModal] = useState(false);
+  const [openSaveModal, setOpenSaveModal] = useState(false);
+  const setControlsEnabled = useStore(state => state.setControlsEnabled);
+
+  const loadingModal = (open:boolean) => {
+    setOpenLoadingModal(open);
+    setControlsEnabled(!open);
+  }
+
+  const generateModal = (open:boolean) => {
+    setOpenGenerateModal(open);
+    setControlsEnabled(!open);
+  }
+
+  const saveModal = (open:boolean) => {
+    setOpenSaveModal(open);
+    setControlsEnabled(!open);
+  }
 
   return (
     <div className="container">
-      <MainFrame setOpenModal={setOpenModal} ref={mainFrame}/>
+      <MainFrame 
+        setOpenLoadingModal={loadingModal} 
+        setOpenGenerateModal={generateModal}
+        setOpenSaveModal={saveModal}
+      />
       {
-        openModal && <SettingsModal 
-          setOpenModal={setOpenModal} 
+        openLoadingModal && <LoadingModal 
+          setOpen={loadingModal} 
           promise={getEntries()}
-          updateMainFrame={update}
+        />
+      }
+      {
+        openGenerateModal && <GenerateModal 
+          setOpen={generateModal}
+        />
+      }
+      {
+        openSaveModal && <SaveModal 
+          setOpen={saveModal}
+          promise={getEntries()}
         />
       }
     </div>

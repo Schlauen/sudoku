@@ -1,8 +1,9 @@
-import React, { useState } from 'react'
+import { useState } from 'react'
 import Button from './Button'
 import "./Modal.css";
-import { BaseDirectory, createDir, writeFile, readTextFile, readDir, FileEntry } from "@tauri-apps/api/fs";
-import { join, appDataDir } from '@tauri-apps/api/path';import { invoke } from '@tauri-apps/api';
+import { readTextFile, FileEntry } from "@tauri-apps/api/fs";
+import { invoke } from '@tauri-apps/api';
+import { useStore } from '../store';
 
 const readDataFile = async (path:string) => {
   try {
@@ -15,12 +16,12 @@ const readDataFile = async (path:string) => {
 
 interface Props {
   promise: Promise<FileEntry[]>;
-  setOpenModal: (open:boolean) => void;
-  updateMainFrame: () => void;
+  setOpen: (open:boolean) => void;
 }
 
-const SettingsModal = ({setOpenModal, promise, updateMainFrame} : Props) => {
+const LoadingModal = ({setOpen: setOpen, promise} : Props) => {
   const [items, setItems] = useState<FileEntry[]>([]);
+  const updatePlayfield = useStore(state => state.updatePlayfield);
 
   promise.then(i => setItems(i));
 
@@ -36,11 +37,10 @@ const SettingsModal = ({setOpenModal, promise, updateMainFrame} : Props) => {
                   name={i.name || ""}
                   onClick={() => {
                     readDataFile(i.path).then(content => {
-                      console.log(content);
                       invoke('deserialize', {msg:content}).then(state => console.log(state))
-                      updateMainFrame();
+                      updatePlayfield();
                     });
-                    setOpenModal(false);
+                    setOpen(false);
                   }}
                 />
               ))
@@ -50,4 +50,4 @@ const SettingsModal = ({setOpenModal, promise, updateMainFrame} : Props) => {
   )
 }
 
-export default SettingsModal
+export default LoadingModal

@@ -1,30 +1,32 @@
-import { forwardRef, useImperativeHandle, useRef } from 'react'
 import Playfield from './Playfield'
 import Sidebar from './Sidebar'
 import Footer from './Footer';
 import Header from './Header';
 
 interface Props {
-  setOpenModal: (open:boolean) => void;
+  setOpenLoadingModal: (open:boolean) => void;
+  setOpenGenerateModal: (open:boolean) => void;
+  setOpenSaveModal: (open:boolean) => void;
 }
 
-const MainFrame = forwardRef(({setOpenModal} : Props, ref) => {
-  const playfield = useRef<any>(null);
-  const update = () => playfield.current.update();
+const MainFrame = ({
+  setOpenLoadingModal: setOpenLoadingModal,
+  setOpenGenerateModal: setOpenGenerateModal,
+  setOpenSaveModal: setOpenSaveModal,
+} : Props) => {
   
-  useImperativeHandle(ref, () => ({update}));
-
   return (
     <div id='main-frame'>
       <Header/>
-      <Sidebar 
-        updatePlayfield={update}
-        setOpenModal={setOpenModal}
+      <Sidebar
+        setOpenLoadingModal={setOpenLoadingModal}
+        setOpenGenerateModal={setOpenGenerateModal}
+        setOpenSaveModal={setOpenSaveModal}
       />
-      <Playfield ref={playfield} />
+      <Playfield/>
       <Footer />
     </div>
   )
-})
+}
 
 export default MainFrame

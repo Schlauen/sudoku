@@ -187,6 +187,9 @@ pub struct Playfield {
     poss_quads: [u16; 9],
     show_errors: bool,
     state: GameState,
+    difficulty: u8,
+    timer_seconds: u32,
+    seed: u64,
 }
 
 impl Playfield {
@@ -194,7 +197,7 @@ impl Playfield {
         serde_json::from_str(string).unwrap()
     }
 
-    pub fn new() -> Playfield {
+    pub fn new(difficulty:u8) -> Playfield {
         Playfield { 
             values: Array2D::filled_with(0, 9, 9),
             solution: Option::None,
@@ -204,6 +207,9 @@ impl Playfield {
             poss_quads: [0b1111111111111111u16; 9],
             show_errors: false,
             state: GameState::Blank,
+            difficulty,
+            timer_seconds: 0,
+            seed: 42,
         }
     }
 
@@ -299,6 +305,8 @@ impl Playfield {
 
     pub fn generate(&mut self, difficulty:u8, seed:u64) -> Result<GameState, String> {
         let _ = self.reset();
+        self.difficulty = difficulty;
+        self.seed = seed;
 
         let mut values_random_mask: [u8; 9] = core::array::from_fn(|i| (i + 1) as u8);
         values_random_mask.shuffle(&mut StdRng::seed_from_u64(seed));
@@ -642,7 +650,7 @@ mod tests {
 
         use std::time::Instant;
 
-        let mut playfield = Playfield::new();
+        let mut playfield = Playfield::new(50);
         let now = Instant::now();
         let _ = playfield.generate(58, 42);
         let elapsed = now.elapsed();
@@ -667,20 +675,20 @@ mod tests {
 
     #[test]
     fn test_solution_counter_empty() {
-        let mut playfield = Playfield::new();
+        let mut playfield = Playfield::new(50);
         assert!(playfield.multiple_solutions_(0) > 1);
     }
 
     #[test]
     fn test_solution_counter_full() {
-        let mut playfield = Playfield::new();
+        let mut playfield = Playfield::new(50);
         let _ = playfield.solve();
         assert!(playfield.multiple_solutions_(0) == 1);
     }
 
     #[test]
     fn test_solution_counter_partial() {
-        let mut playfield = Playfield::new();
+        let mut playfield = Playfield::new(50);
         let _ = playfield.solve();
 
         let mut cursor_random_mask: [usize; 81] = [0; 81];
@@ -702,7 +710,7 @@ mod tests {
 
     #[test]
     fn test_solution_counter_partial_2() {
-        let mut playfield = Playfield::new();
+        let mut playfield = Playfield::new(50);
         let _ = playfield.set_value(7, 0, 6);
         let _ = playfield.set_value(9, 0, 8);
         let _ = playfield.set_value(1, 1, 6);
@@ -727,7 +735,7 @@ mod tests {
 
     #[test]
     fn test_set_value() {
-        let playfield = &mut Playfield::new();
+        let playfield = &mut Playfield::new(50);
 
         let _ = playfield.set_value(1, 0, 0);
         check(playfield, 0, 0, 1);
@@ -741,7 +749,7 @@ mod tests {
 
     #[test]
     fn test_solution_counter_partial_3() {
-        let mut playfield = Playfield::new();
+        let mut playfield = Playfield::new(50);
         
         let _ = playfield.set_value(1, 0, 0);
         let _ = playfield.set_value(2, 1, 3);

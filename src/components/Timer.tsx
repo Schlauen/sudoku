@@ -21,7 +21,6 @@ const Timer = forwardRef((_, ref) => {
     useEffect(() => {
         const interval = setInterval(
             function() {
-                
                 if (gameState == State.Running || gameState == State.Error) {
                     let now = new Date().getTime();
                     let distance = now - startTime;

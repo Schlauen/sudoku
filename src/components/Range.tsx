@@ -14,7 +14,6 @@ const Range = forwardRef(({min, max} : Props, ref) => {
         <div className='menu-element range-container'>
             <label>level:</label>
             <input type='range' min={min} max={max} value={value} className='slider' onChange={(val) => {
-                console.log(val.target.value);
                 setValue(Number(val.target.value));
             }}/>
         </div>

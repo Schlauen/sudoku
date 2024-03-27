@@ -10,13 +10,18 @@ export const State = {
 type GameState = {
     gameState: number;
     message: string;
+    controlsEnabled: boolean;
     changeGameState: (newGameState:number) => void;
     changeMessage: (newMessage:string) => void;
+    updatePlayfield: () => void;
+    setUpdatePlayfield: (updatePlayfield: () => void) => void;
+    setControlsEnabled: (enabled: boolean) => void;
 }
 
 export const useStore = create<GameState>((set) => ({
     gameState: State.Blank,
     message: 'Welcome to a new game of Sudoku!',
+    controlsEnabled: true,
     changeMessage: newMessage => set({message: newMessage}),
     changeGameState: newGameState => set((state) => {
         if (state.gameState == State.Blank) {
@@ -37,4 +42,7 @@ export const useStore = create<GameState>((set) => ({
         
         return { gameState: newGameState}
     }),
+    updatePlayfield: () => console.log('update playfield not implemented'),
+    setUpdatePlayfield: (newUpdatePlayfield) => set({updatePlayfield: newUpdatePlayfield}),
+    setControlsEnabled: enabled => set({controlsEnabled: enabled}),
 }))

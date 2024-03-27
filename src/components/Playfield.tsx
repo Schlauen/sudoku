@@ -1,22 +1,24 @@
 import GenericBox from './GenericBox'
 import Cell from './Cell'
-import { forwardRef, useImperativeHandle, useRef, useState } from 'react'
+import { useRef, useState } from 'react'
 import useEventListener from '@use-it/event-listener';
+import { useStore } from '../store';
 
 
 interface Key {
     key:string;
 }
 
-const Playfield = forwardRef((_, ref) => {
+const Playfield = () => {
     const [focus, setFocus] = useState(40);
     const [spacePressed, setSpacePressed] = useState(false);
     
     const cells = Array(81).fill(undefined).map(_ => useRef<any>(null));
 
-    const update = () => cells.forEach(c => c.current.update());
-    
-    useImperativeHandle(ref, () => ({update}));
+    const setUpdatePlayfield = useStore(state => state.setUpdatePlayfield);
+    setUpdatePlayfield(() => {
+        cells.forEach(c => c.current.update());
+    });
 
     const setFocusTo = (newFocus:number) => {
         if (focus < 0) {
@@ -25,7 +27,6 @@ const Playfield = forwardRef((_, ref) => {
             cells[focus].current.focus(false);
         }
         setFocus(newFocus);
-        console.log(newFocus);
         if (newFocus < 0) {
             return;
         }
@@ -36,13 +37,21 @@ const Playfield = forwardRef((_, ref) => {
     const digitPessed = (key:string, digit:number) => key === digit.toString();
     const toggleNote = (digit:number) => cells[focus].current.toggleNote(digit);
     const setValue = (digit:number) => cells[focus].current.setValue(digit);
+    const controlsEnabled = useStore(state => state.controlsEnabled);
 
     function keyDownHandler({key}:Key) {
+        if (!controlsEnabled) {
+            return;
+        }
+
         if (key === "Control") setSpacePressed(true);
     };
 
     function keyUpHandler({key}:Key) {
-        console.log(key);
+        if (!controlsEnabled) {
+            return;
+        }
+
         if (key === "Control") setSpacePressed(false);
 
         if (key === "ArrowDown" || key === "s") {
@@ -106,6 +115,6 @@ const Playfield = forwardRef((_, ref) => {
             />
         </div>
     )
-});
+};
 
 export default Playfield

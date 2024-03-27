@@ -90,9 +90,11 @@ fn get_game_state(
 #[tauri::command]
 fn generate(
     state: tauri::State<'_, PlayfieldState>,
-    difficulty: u8,
+    difficulty: u8, 
+    seed: u64,
 ) -> Result<u8, String> {
-    state.playfield.lock().unwrap().generate(difficulty, thread_rng().next_u64()).map(|game_state| game_state as u8)
+    println!("{}", seed);
+    state.playfield.lock().unwrap().generate(difficulty, seed).map(|game_state| game_state as u8)
 }
 
 #[tauri::command]
@@ -156,7 +158,7 @@ fn solve(
 fn main() {
     tauri::Builder::default()
         .manage(PlayfieldState {
-            playfield: Mutex::new(Playfield::new()),
+            playfield: Mutex::new(Playfield::new(40)),
             show_errors: Mutex::new(false),
         })
         .invoke_handler(tauri::generate_handler![
