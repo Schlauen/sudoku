@@ -2,8 +2,8 @@ import { useState } from 'react'
 import Button from './Button'
 import "./Modal.css";
 import { readTextFile, FileEntry } from "@tauri-apps/api/fs";
-import { invoke } from '@tauri-apps/api';
-import { useStore } from '../store';
+import { AppState, OpenModal, useStore } from '../store';
+import { deserialize } from '../Interface';
 
 const readDataFile = async (path:string) => {
   try {
@@ -16,14 +16,18 @@ const readDataFile = async (path:string) => {
 
 interface Props {
   promise: Promise<FileEntry[]>;
-  setOpen: (open:boolean) => void;
 }
 
-const LoadingModal = ({setOpen: setOpen, promise} : Props) => {
+const LoadingModal = ({promise} : Props) => {
   const [items, setItems] = useState<FileEntry[]>([]);
-  const updatePlayfield = useStore(state => state.updatePlayfield);
+  const changeOpenModal = useStore(state => state.changeOpenModal);
+  const onError = useStore(state => state.changeMessage);
 
+  const appState = useStore(state => state.appState);
+  const changeAppState = useStore(state => state.changeAppState);
+  
   promise.then(i => setItems(i));
+  const includeCounts = useStore(state => state.appState) == AppState.Editing;
 
   return (
     <div className='modal-background'>
@@ -36,11 +40,14 @@ const LoadingModal = ({setOpen: setOpen, promise} : Props) => {
                 <Button
                   name={i.name || ""}
                   onClick={() => {
-                    readDataFile(i.path).then(content => {
-                      invoke('deserialize', {msg:content}).then(state => console.log(state))
-                      updatePlayfield();
-                    });
-                    setOpen(false);
+                    readDataFile(i.path)
+                      .then(content => deserialize(content, includeCounts, includeCounts, onError))
+                      .catch(onError);
+                      
+                    changeOpenModal(OpenModal.None);
+                    if (appState != AppState.Editing) {
+                      changeAppState(AppState.Solving);
+                    }
                   }}
                 />
               ))

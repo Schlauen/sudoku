@@ -1,14 +1,14 @@
-import { forwardRef, useImperativeHandle, useRef, useState } from "react";
-import { invoke } from "@tauri-apps/api/tauri";
+import { MutableRefObject, forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 import MiniCell from "./MiniCell";
-import { useStore } from '../store';
+import { AppState, useStore } from '../store';
+import { listen } from '@tauri-apps/api/event';
+import { CellUpdateEvent, incrementCellValue } from "../Interface";
 
 const State = {
     Blank: 0,
     Fix: 1,
     Set: 2,
     Error: 3,
-    Unknown: 4,
 }
 
 interface Props {
@@ -16,104 +16,91 @@ interface Props {
     col: number;
 }
 
-interface CellState {
-    value:number;
-    state:number;
-    game_state:number;
+interface Cell {
+    value: number,
+    state: number,
+}
+
+function getClassName(state:number, showErrors:boolean, focus:boolean) {
+    let className:string;
+    if (state == State.Blank) {
+        className = 'cell box enabled';
+    }
+    else if (state == State.Fix) {
+        className = 'cell disabled';
+    }
+    else if (state == State.Set) {
+        className = 'cell enabled';
+    }
+    else if (state == State.Error) {
+        if (showErrors) {
+            className = 'cell error';
+        } else {
+            className = 'cell enabled';
+        }
+    }
+    else {
+        className = '';
+    }
+
+    if (focus) {
+        className += ' selected';
+    }
+
+    return className;
+}
+
+function toValue(value:number, miniCells:Array<MutableRefObject<any>>) {
+    if (value > 0) {
+        return value.toString();
+    }
+    
+    return Array(9).fill(undefined).map((_,i) => (<MiniCell digit={i+1} ref={miniCells[i]} />));
 }
 
 const Cell = forwardRef(({ row, col }: Props, ref) => {
     const [state, setState] = useState(State.Blank);
+    const showErrors = useStore(state => state.showError);
+    const appState = useStore(state => state.appState);
     const [value, setValue] = useState(0);
     const [focus, setFocus] = useState(false);
+    const onError = useStore(state => state.changeMessage);
+    const includeCounts = useStore(state => state.appState) == AppState.Editing; 
 
     const miniCells = Array(9).fill(undefined).map(_ => useRef<any>(null));
 
-    const getClassName = () => {
-        let className:string;
-        if (state == State.Blank) {
-            className = 'cell box enabled';
-        }
-        else if (state == State.Fix) {
-            className = 'cell disabled';
-        }
-        else if (state == State.Set) {
-            className = 'cell enabled';
-        }
-        else if (state == State.Error) {
-            className = 'cell error';
-        }
-        else if (state == State.Unknown) {
-            className = 'cell enabled';
-        }
-        else {
-            className = '';
-        }
-
-        if (focus) {
-            className += ' selected';
-        }
-
-        return className;
-    }
-
-    const changeGameState = useStore((state) => state.changeGameState);
-    const onError = useStore((state) => state.changeMessage);
-
-    const updateCell = (cell:CellState) => {
-        setValue(cell.value);
-        setState(cell.state);
-        changeGameState(cell.game_state);
-    }
-
-    const update = () => invoke<CellState>('get_cell_state', {row:row, col:col})
-        .then(updateCell)
-        .catch(onError);
-    const toggleNote = (digit:number) => {
-        console.log('toggle-note', miniCells[digit - 1]);
-        let current = miniCells[digit - 1].current;
-        if (current) {
-            current.toggle();
-        }
-    }
-    const setAndUpdate = (digit:number) => invoke<CellState>(
-        'set_value', 
-        {row:row, col:col, value:digit}
-    ).then(updateCell)
-    .catch(onError);
-
     useImperativeHandle(ref, () => {
         return {
-            update:update,
             focus:setFocus,
-            toggleNote:toggleNote,
-            setValue:setAndUpdate,
+            toggleNote:(digit:number) => {
+                let current = miniCells[digit - 1].current;
+                if (current) {
+                    current.toggle();
+                }
+            }
         };
     });
 
-    const toValue = (value:number) => {
-        if (value > 0) {
-            return value.toString();
-        }
-        
-        return Array(9).fill(undefined).map((_,i) => (<MiniCell digit={i+1} ref={miniCells[i]} />))
-    }
+    useEffect(() => {
+        const unlisten = listen<CellUpdateEvent>('updateCell-'+row+'-'+col, event => {
+            console.log(event.payload);
+            setState(event.payload.state);
+            setValue(event.payload.value);
+        });
+    
+        return () => {
+            unlisten.then(f => f());
+        };
+    });
 
     return (
         <div 
             id={row  + "," + col }
             key={row + "," + col }
-            className={getClassName()}
-            onClick={
-                () => invoke<CellState>(
-                    "increment_value", 
-                    {row:row, col:col}
-                )
-                .then(updateCell)
-                .catch(onError)
-            }
+            className={getClassName(state, showErrors || appState == AppState.Editing, focus)}
+            onClick={() => incrementCellValue(row, col, includeCounts, includeCounts, onError)}
         >
-            {toValue(value)}
+            {toValue(value, miniCells)}
         </div>
     );
 });

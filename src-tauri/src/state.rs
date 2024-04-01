@@ -5,6 +5,8 @@ use rand::prelude::*;
 use serde::{Serialize, Deserialize};
 use serde_json;
 
+use crate::Request;
+
 // (row, col, quad) triplets
 const FIELDS:[((usize, usize), usize); 81] = [
     ((0,0),0), ((0,1),0), ((0,2),0), ((0,3),1), ((0,4),1), ((0,5),1), ((0,6),2), ((0,7),2), ((0,8),2),
@@ -41,13 +43,28 @@ const VALUES_BIN_INV:[u16;9] = [
     0b1111111011111111,
 ];
 
-#[derive(Clone, Copy, Serialize, Deserialize, Debug)]
+#[derive(Clone, Copy, Serialize, Deserialize, Debug, PartialEq, Eq)]
 #[repr(u8)]
 pub enum CellState {
     Blank,
     Fix,
     Set,
     Error,
+}
+
+#[derive(serde::Serialize, Clone)]
+struct CellUpdateEvent {
+    row: u8,
+    col: u8,
+    value: u8,
+    state: u8,
+}
+
+#[derive(serde::Serialize, Clone)]
+struct GameUpdateEvent {
+    state: u8,
+    clue_count: Option<u8>,
+    solution_count: Option<u8>,
 }
 
 impl TryFrom<u8> for CellState {
@@ -64,7 +81,7 @@ impl TryFrom<u8> for CellState {
     }
 }
 
-#[derive(Clone, Copy, Serialize, Deserialize)]
+#[derive(Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 pub enum GameState {
     Blank,
     Running,
@@ -193,12 +210,17 @@ pub struct Playfield {
 }
 
 impl Playfield {
-    pub fn from_json(string: &str) -> Playfield {
-        serde_json::from_str(string).unwrap()
+    pub fn from_json(string: &str, request:Option<&Request>) -> Playfield {
+        let mut p:Playfield = serde_json::from_str(string).unwrap();
+        if let Some(r) = request {
+            p.emit_update_event(r);
+        }
+        
+        p
     }
 
-    pub fn new(difficulty:u8) -> Playfield {
-        Playfield { 
+    pub fn new(difficulty:u8, request:Option<&Request>) -> Playfield {
+        let mut p = Playfield { 
             values: Array2D::filled_with(0, 9, 9),
             solution: Option::None,
             states: Array2D::filled_with(CellState::Blank, 9, 9),
@@ -210,26 +232,45 @@ impl Playfield {
             difficulty,
             timer_seconds: 0,
             seed: 42,
+        };
+        if let Some(r) = request {
+            p.emit_update_event(r);
         }
+
+        p
     }
 
     pub fn to_json(&self) -> Result<String, serde_json::Error> {
         serde_json::to_string(&self)
     }
 
-    pub fn reset(&mut self) -> Result<GameState, String> {
-        self.values = Array2D::filled_with(0, 9, 9);
-        self.solution = Option::None;
-        self.states = Array2D::filled_with(CellState::Blank, 9, 9);
-        self.poss_rows = [0b1111111111111111u16; 9];
-        self.poss_cols = [0b1111111111111111u16; 9];
-        self.poss_quads = [0b1111111111111111u16; 9];
-        self.show_errors = false;
-        self.state = GameState::Blank;
+    pub fn get_clue_count(&self) -> u8 {
+        self.states.elements_row_major_iter().filter(|s| match s {
+            CellState::Fix | CellState::Error | CellState::Set => true,
+            CellState::Blank => false,            
+        }).count() as u8
+    }
+
+    pub fn increment_timer(&mut self) -> Result<u32, String> {
+        match self.state {
+            GameState::Blank | GameState::Solved => {},
+            GameState::Error | GameState::Running => self.timer_seconds += 1,      
+        };
+        
+        Ok(self.timer_seconds)
+    }
+
+    pub fn reset(&mut self, window:Option<&Request>) -> Result<GameState, String> {
+        FIELDS.iter().for_each(|((r, c), _)| match self.states[(*r, *c)] {
+            CellState::Blank | CellState::Error | CellState::Set => {
+                self.reset_value(*r, *c, window);
+            },
+            CellState::Fix => ()
+        });
         Ok(self.state)
     }
 
-    pub fn set_value(&mut self, value:u8, row:usize, col:usize) -> Result<u8, String> {
+    pub fn set_value(&mut self, value:u8, row:usize, col:usize, request:Option<&Request>) -> Result<u8, String> {
         let rc = (row, col);
 
         match self.state {
@@ -244,11 +285,11 @@ impl Playfield {
             },
             CellState::Error | CellState::Blank | CellState::Set => {
                 if value == 0 {
-                    self.reset_value(row, col);
+                    self.reset_value(row, col, Option::None);
                 } else {
                     let current_val = self.values[rc];
                     if current_val > 0 {
-                        self.reset_value(row, col);
+                        self.reset_value(row, col, Option::None);
                     }
             
                     let mov_zero_based = (value - 1) as usize;
@@ -268,8 +309,8 @@ impl Playfield {
             }
         }
 
-        self.update_cell_state(row, col);
-
+        self.update_states(request);
+        
         Ok(self.values[rc])
     }
 
@@ -277,17 +318,29 @@ impl Playfield {
         self.values[(row, col)]
     }
 
-    pub fn get_cell_state(&self, row:usize, col:usize) -> CellState {
-        self.states[(row, col)]
-    }
-
-    pub fn get_game_state(&self) -> GameState {
-        self.state
-    }
-
-    fn is_error(&self, row:usize, col:usize) -> bool {
+    fn is_error(&mut self, row:usize, col:usize) -> bool {
         match self.solution.as_ref() {
-            None => false,
+            None => {
+                let value = self.values[(row, col)];
+                if value == 0 {
+                    return false;
+                }
+
+                for i in 0..9 {
+                    if i != col && value == self.values[(row, i)] {
+                        return true;
+                    }
+                    if i != row && value == self.values[(i, col)] {
+                        return true;
+                    }
+                    let r = i / 3 + 3*(row/3);
+                    let c = i % 3 + 3*(col/3);
+                    if !(r == row && c == col) && value == self.values[(r,c)] {
+                        return true;
+                    }
+                }
+                return false;
+            },
             Some(s) => {
                 let val = self.values[(row, col)];
                 if val == 0 {
@@ -303,18 +356,13 @@ impl Playfield {
         }
     }
 
-    pub fn generate(&mut self, difficulty:u8, seed:u64) -> Result<GameState, String> {
-        let _ = self.reset();
+    pub fn generate(&mut self, difficulty:u8, seed:u64, request:Option<&Request>, fix_result:bool) -> Result<GameState, String> {
         self.difficulty = difficulty;
         self.seed = seed;
-
-        let mut values_random_mask: [u8; 9] = core::array::from_fn(|i| (i + 1) as u8);
-        values_random_mask.shuffle(&mut StdRng::seed_from_u64(seed));
 
         if !self.solve_random_(0, seed) {
             return Err("Error occured during seed generation".into());
         }
-        self.solution = Option::Some(self.values.clone());
 
         let cursor_random_mask = self.generate_seed(seed);
         
@@ -328,16 +376,72 @@ impl Playfield {
                 let val = self.values[rc];
                 if val == 0 {
                     self.states[rc] = CellState::Blank;
-                    continue;
+                } else {
+                    self.states[rc] = CellState::Set;
                 }
-                self.states[rc] = CellState::Fix;
             }
         }
+
+        if fix_result {
+            self.fix_current();
+        }
+        
         self.state = GameState::Running;
+        if let Some(r) = request {
+            self.emit_update_event(r);
+        }
         Ok(self.state)
     }
 
-    fn reset_value(&mut self, row:usize, col:usize) {
+    pub fn fix_current(&mut self) {
+        self.solution = Option::Some(self.values.clone());
+        for row in 0..9 {
+            for col in 0..9 {
+                let rc = (row, col);
+                let val = self.values[rc];
+                if val > 0 {
+                    self.states[rc] = CellState::Fix;
+                }
+            }
+        }
+    }
+
+    
+    pub fn emit_update_event(&mut self, request:&Request) {
+        for row in 0..9 {
+            for col in 0..9 {
+                self.emit_update_cell_event(row, col, request);
+            }
+        }
+        self.emit_update_game_event(request);
+    }
+
+    fn emit_update_cell_event(&self, row:usize, col:usize, request:&Request) {
+        let event = CellUpdateEvent {
+            row: row as u8,
+            col: col as u8,
+            value: self.values[(row, col)],
+            state: self.states[(row, col)] as u8,
+        };
+        request.window.emit(&format!("updateCell-{}-{}", row, col), event).unwrap();
+    }
+
+    fn emit_update_game_event(&mut self, request:&Request) {
+        let event = GameUpdateEvent {
+            state: self.state as u8,
+            clue_count: match request.include_clue_count {
+                true => Option::Some(self.get_clue_count()),
+                false => Option::None,
+            },
+            solution_count: match request.include_solution_count {
+                true => Option::Some(self.count_solutions(5)),
+                false => Option::None,
+            }
+        };
+        request.window.emit("updateGame", event).unwrap();
+    }
+
+    fn reset_value(&mut self, row:usize, col:usize, request:Option<&Request>) {
         let rc = (row, col);
         match self.states[rc] {
             CellState::Blank | CellState::Fix => {},
@@ -351,12 +455,12 @@ impl Playfield {
                 let quad = QUADS[row][col] as usize;
                 let mov_zero_based = (current_val - 1) as usize;
                 self.reset_value_((rc, quad), mov_zero_based);
-                self.update_cell_state(row, col);
+                self.update_states(request);
             }
-        }        
+        };
     }
 
-    pub fn solve(&mut self) -> Result<GameState, String> {   
+    pub fn solve(&mut self, request:Option<&Request>) -> Result<GameState, String> {   
         match self.state {
             GameState::Solved => {
                 return Err("Already solved".into());
@@ -370,69 +474,83 @@ impl Playfield {
         self.solve_(0);
         
         self.solution = Option::Some(self.values.clone());
-        FIELDS.iter().for_each(|((r,c), _)| self.update_cell_state(*r, *c));
+        self.update_states(request);
 
         Ok(self.state)
     }
 
-    fn update_cell_state(&mut self, row:usize, col:usize) {
-        let rc = (row, col);
-        match self.states[rc] {
-            CellState::Error => {
-                if !self.is_error(row, col) {
-                    if self.values[rc] > 0 {
-                        self.states[rc] = CellState::Set;
+    fn update_states(&mut self, request:Option<&Request>) {
+        let cell_states = FIELDS.iter().map(|(rc, q)| {
+            let (row, col) = *rc;
+            let rc = (row, col);
+            let current_state = self.states[rc];
+            let new_state = match current_state {
+                CellState::Error => {
+                    if !self.is_error(row, col) {
+                        if self.values[rc] > 0 {
+                            CellState::Set
+                        } else {
+                            CellState::Blank
+                        }
                     } else {
-                        self.states[rc] = CellState::Blank;
+                        current_state
                     }
                 }
-            }
-            CellState::Fix => {}
-            CellState::Blank | CellState::Set => {
-                if self.is_error(row, col) {
-                    self.states[(row, col)] = CellState::Error;
-                } else {
-                    if self.values[rc] > 0 {
-                        self.states[rc] = CellState::Set;
+                CellState::Fix => current_state,
+                CellState::Blank | CellState::Set => {
+                    if self.is_error(row, col) {
+                        CellState::Error
                     } else {
-                        self.states[rc] = CellState::Blank;
+                        if self.values[rc] > 0 {
+                            CellState::Set
+                        } else {
+                            CellState::Blank
+                        }
                     }
                 }
+            };
+            
+            self.states[rc] = new_state;
+            
+            if let Some(w) = request {
+                self.emit_update_cell_event(row, col, w);
             }
-        }
-        self.update_game_state();
-    }
+            new_state
+        }).collect::<Vec<CellState>>();
 
-    fn update_game_state(&mut self) {
-        let states = FIELDS.iter().map(|(rc, _)| self.states[*rc]);
-
-        let has_any_errors = states.clone().any(|state| {
+        let has_any_errors = cell_states.iter().any(|state| {
             match state {
                 CellState::Error => true,
                 CellState::Blank | CellState::Fix | CellState::Set => false,
             }
         });
-        let all_empty = !has_any_errors && states.clone().all(|state| {
+        let all_empty = !has_any_errors && cell_states.iter().all(|state| {
             match state {
                 CellState::Blank => true,
                 CellState::Error | CellState::Fix | CellState::Set => false,
             }
         });
-        let all_set = !has_any_errors && states.clone().all(|state| {
+        let all_set = !has_any_errors && cell_states.iter().all(|state| {
             match state {
                 CellState::Fix | CellState::Set => true,
                 CellState::Error | CellState::Blank => false,
             }
         }); 
 
+        let new_state:GameState;
         if has_any_errors {
-            self.state = GameState::Error;
+            new_state = GameState::Error;
         } else if all_set {
-            self.state = GameState::Solved;
+            new_state = GameState::Solved;
         } else if all_empty {
-            self.state = GameState::Blank;
+            new_state = GameState::Blank;
         } else {
-            self.state = GameState::Running;
+            new_state = GameState::Running;
+        }
+        self.state = new_state;
+
+        if let Some(req) = request {
+            self.emit_update_game_event(req);
         }
     }
 
@@ -486,7 +604,7 @@ impl Playfield {
     }
 
     fn generate_(&mut self, fields_queue: &Vec<usize>, cursor:usize, removed_count:u8, difficulty:u8) -> bool {
-        if cursor >= 81 || self.multiple_solutions_(0) > 1 {
+        if cursor >= fields_queue.len() || self.count_solutions_(0, 2) > 1 {
             return false;
         }
         
@@ -510,7 +628,15 @@ impl Playfield {
         self.generate_(fields_queue, cursor + 1, removed_count, difficulty)
     }
 
-    fn multiple_solutions_(&mut self, cursor:usize) -> u8 {
+    pub fn count_solutions(&mut self, limit:u8) -> u8 {
+        if self.state == GameState::Error {
+            println!("error state, no solutions");
+            return 0;
+        }
+        self.count_solutions_(0, limit)
+    }
+
+    fn count_solutions_(&mut self, cursor:usize, limit:u8) -> u8 {
         if cursor >= 81 {
             return 1;
         }
@@ -518,17 +644,17 @@ impl Playfield {
         let (rc, _) = rcq;
 
         match self.get_possible_moves(rc) {
-            None => self.multiple_solutions_(cursor + 1),
+            None => self.count_solutions_(cursor + 1, limit),
             Some(moves) => {
                 let mut sum = 0;
                 for mov_zero_based in moves {
                     self.set_value_(rcq, mov_zero_based);
         
-                    sum += self.multiple_solutions_(cursor + 1);
+                    sum += self.count_solutions_(cursor + 1, limit);
 
                     self.reset_value_(rcq, mov_zero_based);
-                    if sum > 1 {
-                        return 2;
+                    if sum >= limit {
+                        return limit;
                     }
                 }
                 sum
@@ -607,10 +733,18 @@ impl Playfield {
             let rcq = FIELDS[*clue];
             let (rc, _) = rcq;
 
+            if match self.states[rc] {
+                CellState::Blank => false,
+                CellState::Error | CellState::Fix | CellState::Set => true,
+            } {
+                continue;
+            }
+            
             let value = self.values[rc];
             if value == 0 {
                 continue;
             }
+
             let strength = self.get_strength(rcq);
             if strength < weakest_strength {
                 weakest_strength = strength;
@@ -645,14 +779,47 @@ impl Playfield {
 mod tests {
     use super::*;
 
+
+    #[test]
+    fn test_is_error() {
+        let mut playfield = Playfield::new(50, Option::None);
+        let _ = playfield.set_value(1, 1, 2, Option::None);
+        assert!(!playfield.is_error(1, 2));
+        assert!(!playfield.is_error(7, 2));
+
+        let _ = playfield.set_value(1, 7, 2, Option::None);
+        assert!(matches!(playfield.states[(1,2)], CellState::Error));
+        assert!(playfield.is_error(7, 2));
+
+        let _ = playfield.reset_value(1, 2, Option::None);
+        assert!(!playfield.is_error(1, 2));
+        assert!(!playfield.is_error(7, 2));
+
+        let _ = playfield.reset_value(1, 2, Option::None);
+        assert!(!playfield.is_error(1, 2));
+        assert!(!playfield.is_error(7, 2));
+
+        let _ = playfield.set_value(1, 6, 0, Option::None);
+        assert!(playfield.is_error(6, 0));
+        assert!(playfield.is_error(7, 2));
+
+        let _ = playfield.reset_value(7, 2, Option::None);
+        assert!(!playfield.is_error(6, 0));
+        assert!(!playfield.is_error(7, 2));
+
+        let _ = playfield.set_value(1, 6, 4, Option::None);
+        assert!(playfield.is_error(6, 0));
+        assert!(playfield.is_error(6, 4));
+    }
+
     #[test]
     fn test_generation() {
 
         use std::time::Instant;
 
-        let mut playfield = Playfield::new(50);
+        let mut playfield = Playfield::new(50, Option::None);
         let now = Instant::now();
-        let _ = playfield.generate(58, 42);
+        let _ = playfield.generate(58, 42, Option::None, true);
         let elapsed = now.elapsed();
         println!("Elapsed: {:.2?}", elapsed);
     }
@@ -675,21 +842,21 @@ mod tests {
 
     #[test]
     fn test_solution_counter_empty() {
-        let mut playfield = Playfield::new(50);
-        assert!(playfield.multiple_solutions_(0) > 1);
+        let mut playfield = Playfield::new(50, Option::None);
+        assert!(playfield.count_solutions_(0, 2) > 1);
     }
 
     #[test]
     fn test_solution_counter_full() {
-        let mut playfield = Playfield::new(50);
-        let _ = playfield.solve();
-        assert!(playfield.multiple_solutions_(0) == 1);
+        let mut playfield = Playfield::new(50, Option::None);
+        let _ = playfield.solve(Option::None);
+        assert!(playfield.count_solutions_(0, 2) == 1);
     }
 
     #[test]
     fn test_solution_counter_partial() {
-        let mut playfield = Playfield::new(50);
-        let _ = playfield.solve();
+        let mut playfield = Playfield::new(50, Option::None);
+        let _ = playfield.solve(Option::None);
 
         let mut cursor_random_mask: [usize; 81] = [0; 81];
         for i in 0..81 {
@@ -699,67 +866,67 @@ mod tests {
 
         for i in 0..20 {
             let ((row, col), _) = FIELDS[cursor_random_mask[i]];
-            let _ = playfield.set_value(0, row, col);
+            let _ = playfield.set_value(0, row, col, Option::None);
         }
 
         let values_before = playfield.values.clone();
-        assert!(playfield.multiple_solutions_(0) == 1);
+        assert!(playfield.count_solutions_(0, 2) == 1);
 
         assert_eq!(values_before, playfield.values);
     }
 
     #[test]
     fn test_solution_counter_partial_2() {
-        let mut playfield = Playfield::new(50);
-        let _ = playfield.set_value(7, 0, 6);
-        let _ = playfield.set_value(9, 0, 8);
-        let _ = playfield.set_value(1, 1, 6);
-        let _ = playfield.set_value(1, 2, 3);
-        let _ = playfield.set_value(2, 2, 4);
-        let _ = playfield.set_value(6, 3, 4);
-        let _ = playfield.set_value(5, 4, 2);
-        let _ = playfield.set_value(8, 4, 3);
-        let _ = playfield.set_value(2, 4, 6);
-        let _ = playfield.set_value(4, 4, 8);
-        let _ = playfield.set_value(9, 5, 1);
-        let _ = playfield.set_value(7, 5, 2);
-        let _ = playfield.set_value(2, 5, 3);
-        let _ = playfield.set_value(6, 5, 7);
-        let _ = playfield.set_value(5, 5, 8);
-        let _ = playfield.set_value(5, 6, 0);
-        let _ = playfield.set_value(1, 6, 2);
-        let _ = playfield.set_value(2, 6, 5);
+        let mut playfield = Playfield::new(50, Option::None);
+        let _ = playfield.set_value(7, 0, 6, Option::None);
+        let _ = playfield.set_value(9, 0, 8, Option::None);
+        let _ = playfield.set_value(1, 1, 6, Option::None);
+        let _ = playfield.set_value(1, 2, 3, Option::None);
+        let _ = playfield.set_value(2, 2, 4, Option::None);
+        let _ = playfield.set_value(6, 3, 4, Option::None);
+        let _ = playfield.set_value(5, 4, 2, Option::None);
+        let _ = playfield.set_value(8, 4, 3, Option::None);
+        let _ = playfield.set_value(2, 4, 6, Option::None);
+        let _ = playfield.set_value(4, 4, 8, Option::None);
+        let _ = playfield.set_value(9, 5, 1, Option::None);
+        let _ = playfield.set_value(7, 5, 2, Option::None);
+        let _ = playfield.set_value(2, 5, 3, Option::None);
+        let _ = playfield.set_value(6, 5, 7, Option::None);
+        let _ = playfield.set_value(5, 5, 8, Option::None);
+        let _ = playfield.set_value(5, 6, 0, Option::None);
+        let _ = playfield.set_value(1, 6, 2, Option::None);
+        let _ = playfield.set_value(2, 6, 5, Option::None);
 
-        assert!(playfield.multiple_solutions_(0) > 1);
+        assert!(playfield.count_solutions_(0, 2) > 1);
     }
 
     #[test]
     fn test_set_value() {
-        let playfield = &mut Playfield::new(50);
+        let playfield = &mut Playfield::new(50, Option::None);
 
-        let _ = playfield.set_value(1, 0, 0);
+        let _ = playfield.set_value(1, 0, 0, Option::None);
         check(playfield, 0, 0, 1);
 
-        let _ = playfield.set_value(2, 0, 0);
+        let _ = playfield.set_value(2, 0, 0, Option::None);
         check(playfield, 0, 0, 2);
 
-        let _ = playfield.set_value(0, 0, 0);
+        let _ = playfield.set_value(0, 0, 0, Option::None);
         check(playfield, 0, 0, 0)
     }
 
     #[test]
     fn test_solution_counter_partial_3() {
-        let mut playfield = Playfield::new(50);
+        let mut playfield = Playfield::new(50, Option::None);
         
-        let _ = playfield.set_value(1, 0, 0);
-        let _ = playfield.set_value(2, 1, 3);
-        let _ = playfield.set_value(3, 3, 1);
-        let _ = playfield.set_value(4, 5, 4);
+        let _ = playfield.set_value(1, 0, 0, Option::None);
+        let _ = playfield.set_value(2, 1, 3, Option::None);
+        let _ = playfield.set_value(3, 3, 1, Option::None);
+        let _ = playfield.set_value(4, 5, 4, Option::None);
 
         assert_eq!(playfield.get_possible_moves((1, 1)).unwrap(), vec![3, 4, 5, 6, 7, 8]);
         assert_eq!(playfield.get_possible_moves((3, 3)).unwrap(), vec![0, 4, 5, 6, 7, 8]);
         assert_eq!(playfield.get_possible_moves((5, 0)).unwrap(), vec![1, 4, 5, 6, 7, 8]);
-        assert!(playfield.multiple_solutions_(0) > 1);
+        assert!(playfield.count_solutions_(0, 2) > 1);
     }
 
     fn check(playfield:&mut Playfield, row:usize, col:usize, val:usize) {

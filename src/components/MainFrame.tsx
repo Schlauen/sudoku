@@ -1,28 +1,44 @@
 import Playfield from './Playfield'
-import Sidebar from './Sidebar'
+import SolveSidebar from './SolveSidebar'
 import Footer from './Footer';
 import Header from './Header';
+import { AppState, useStore } from '../store';
+import EditorSidebar from './EditorSidebar';
+import StartSidebar from './StartSidebar';
 
-interface Props {
-  setOpenLoadingModal: (open:boolean) => void;
-  setOpenGenerateModal: (open:boolean) => void;
-  setOpenSaveModal: (open:boolean) => void;
+const renderSidebar = (appState:number) => {
+  {
+    switch (appState) {
+      case AppState.Start:
+        return <StartSidebar/>
+      case AppState.Solved:
+      case AppState.Solving:
+        return <SolveSidebar/>
+      case AppState.Editing:
+        return <EditorSidebar/>
+    }   
+  }
 }
 
-const MainFrame = ({
-  setOpenLoadingModal: setOpenLoadingModal,
-  setOpenGenerateModal: setOpenGenerateModal,
-  setOpenSaveModal: setOpenSaveModal,
-} : Props) => {
-  
+const renderPlayfield = (appState:number) => {
+  {
+    switch (appState) {
+      case AppState.Solving:
+      case AppState.Editing:
+        return <Playfield/>
+    }   
+  }
+}
+
+const MainFrame = () => {
+  const appState = useStore(state => state.appState);
+
   return (
     <div id='main-frame'>
       <Header/>
-      <Sidebar
-        setOpenLoadingModal={setOpenLoadingModal}
-        setOpenGenerateModal={setOpenGenerateModal}
-        setOpenSaveModal={setOpenSaveModal}
-      />
+      {
+        renderSidebar(appState)
+      }
       <Playfield/>
       <Footer />
     </div>

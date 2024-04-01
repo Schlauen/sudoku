@@ -1,20 +1,19 @@
 import { useEffect } from 'react'
-import { useStore, State } from '../store';
-
-
+import { AppState, useStore } from '../store';
 
 const Header = () => {
     const setMessage = useStore(state => state.changeMessage);
-    const gameState = useStore(state => state.gameState);
+    const appState = useStore(state => state.appState);
     
     useEffect(() => {
         const interval = setInterval(
             function() {
-                if (gameState == State.Solved) return;
+                if (appState == AppState.Solved) return;
                 setMessage('');
             }, 
             3000
         );
+
         return () => clearInterval(interval);
     })
 

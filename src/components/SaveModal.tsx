@@ -1,17 +1,15 @@
 import { useRef, useState } from 'react'
 import Button from './Button'
 import "./Modal.css";
-import { readTextFile, FileEntry } from "@tauri-apps/api/fs";
-import { invoke } from '@tauri-apps/api';
-import { useStore } from '../store';
+import { FileEntry } from "@tauri-apps/api/fs";
+import { OpenModal, useStore } from '../store';
 import { BaseDirectory, createDir, writeTextFile, exists } from "@tauri-apps/api/fs";
 import { join } from '@tauri-apps/api/path';
-import Input from './NumberInput';
 import TextInput from './TextInput';
+import { serialize } from '../Interface';
 
 interface Props {
   promise: Promise<FileEntry[]>;
-  setOpen: (open:boolean) => void;
 }
 
 const createDataFolder = async () => {
@@ -20,40 +18,34 @@ const createDataFolder = async () => {
   if (ex) {
       return;
   }
-  try {
-      await createDir(savegames, {
-          dir: BaseDirectory.AppData,
-          recursive: true,
-      });
-  } catch (e) {
-      console.error(e);
-  }
+  createDir(savegames, {
+    dir: BaseDirectory.AppData,
+    recursive: true,
+  });
 };
 
 const createDataFile = async (name:string, content:string) => {
-  createDataFolder();
+  await createDataFolder();
   const path = await join("savegames", name + '.json');
-  try {
-    await writeTextFile(
-      {
-        contents: content,
-        path: path,
-      },
-      {
-          dir: BaseDirectory.AppData
-      },
-    );
-  } catch (e) {
-    console.log(e);
-  }
+  await writeTextFile(
+    {
+      contents: content,
+      path: path,
+    },
+    {
+        dir: BaseDirectory.AppData
+    },
+  );
 };
 
-const SaveModal = ({setOpen: setOpen, promise} : Props) => {
+const SaveModal = ({promise} : Props) => {
   const [items, setItems] = useState<FileEntry[]>([]);
   const inputRef = useRef<any>(null);
+  const changeOpenModal = useStore(state => state.changeOpenModal);
+  const onError = useStore(state => state.changeMessage)
 
   promise.then(i => setItems(i));
-  
+
   return (
     <div className='modal-background'>
         <div className='modal-container'>
@@ -66,10 +58,8 @@ const SaveModal = ({setOpen: setOpen, promise} : Props) => {
                 onClick={() => {
                   console.log(inputRef);
                   const filename = inputRef.current.getValue();
-                  invoke<string>('serialize')
-                    .then((content: string) => createDataFile(filename, content))
-                    .catch(e => console.log(e));
-                  setOpen(false);
+                  serialize(content => createDataFile(filename, content).catch(onError), onError);
+                  changeOpenModal(OpenModal.None);
                 }}
             />
             {

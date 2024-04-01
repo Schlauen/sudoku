@@ -2,7 +2,8 @@ import GenericBox from './GenericBox'
 import Cell from './Cell'
 import { useRef, useState } from 'react'
 import useEventListener from '@use-it/event-listener';
-import { useStore } from '../store';
+import { AppState, useStore } from '../store';
+import { setCellValue } from '../Interface';
 
 
 interface Key {
@@ -14,11 +15,6 @@ const Playfield = () => {
     const [spacePressed, setSpacePressed] = useState(false);
     
     const cells = Array(81).fill(undefined).map(_ => useRef<any>(null));
-
-    const setUpdatePlayfield = useStore(state => state.setUpdatePlayfield);
-    setUpdatePlayfield(() => {
-        cells.forEach(c => c.current.update());
-    });
 
     const setFocusTo = (newFocus:number) => {
         if (focus < 0) {
@@ -36,7 +32,10 @@ const Playfield = () => {
     const focusCol = () => focus % 9;
     const digitPessed = (key:string, digit:number) => key === digit.toString();
     const toggleNote = (digit:number) => cells[focus].current.toggleNote(digit);
-    const setValue = (digit:number) => cells[focus].current.setValue(digit);
+    const onError = useStore(state => state.changeMessage);
+
+    const includeCounts = useStore(state => state.appState) == AppState.Editing; 
+    const setValue = (digit:number) => setCellValue(digit, focusRow(), focusCol(), includeCounts, includeCounts, onError);
     const controlsEnabled = useStore(state => state.controlsEnabled);
 
     function keyDownHandler({key}:Key) {

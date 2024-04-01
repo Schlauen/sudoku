@@ -1,21 +1,22 @@
 import { useRef } from 'react'
 import Button from './Button'
 import "./Modal.css";
-import { invoke } from '@tauri-apps/api';
 import Range from './Range';
-import { useStore } from '../store';
+import { AppState, OpenModal, useStore } from '../store';
 import NumberInput from './NumberInput';
+import { generate } from '../Interface';
 
-interface Props {
-  setOpen: (open:boolean) => void;
-}
-
-const GenerateModal = ({setOpen: setOpen} : Props) => {
+const GenerateModal = () => {
   const rangeRef = useRef<any>(null);
   const inputRef = useRef<any>(null);
+  const changeOpenModal = useStore(state => state.changeOpenModal);
+  
+  const appState = useStore(state => state.appState);
+  const changeAppState = useStore(state => state.changeAppState);
+  
   const onError = useStore(state => state.changeMessage);
-  const updatePlayfield = useStore(state => state.updatePlayfield);
-
+  const includeCounts = useStore(state => state.appState) == AppState.Editing; 
+  
   return (
     <div className='modal-background'>
         <div className='modal-container'>
@@ -26,14 +27,20 @@ const GenerateModal = ({setOpen: setOpen} : Props) => {
             <NumberInput name="seed" ref={inputRef}/>
             <Button
                 name='generate'
-                onClick={() => invoke('generate', {
-                  difficulty:rangeRef.current.getValue(),
-                  seed:inputRef.current.getValue(),
-                }).then((_) => {
-                    updatePlayfield();
-                    setOpen(false);
-                })
-                .catch(onError)}
+                onClick={() => {
+                  generate(
+                    rangeRef.current.getValue(),
+                    inputRef.current.getValue(),
+                    includeCounts, includeCounts, !includeCounts,
+                    () => {
+                      changeOpenModal(OpenModal.None);
+                      if (appState != AppState.Editing) {
+                        changeAppState(AppState.Solving);
+                      }
+                    },
+                    onError,
+                  )
+                }}
             />
         </div>
     </div>
