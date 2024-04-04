@@ -32,6 +32,24 @@ fn serialize(
 }
 
 #[tauri::command]
+fn toggle_note(
+    state: tauri::State<'_, PlayfieldState>,
+    window: Window,
+    row:usize, col:usize, 
+    value:u8
+) -> Result<(),String> {
+    let mut playfield = state.playfield.lock().unwrap();
+    playfield.toggle_note(
+        row, col, value,
+        Option::Some(&Request {
+            window,
+            include_clue_count:false,
+            include_solution_count:false,
+        }), 
+    )
+}
+
+#[tauri::command]
 fn increment_timer(
     state: tauri::State<'_, PlayfieldState>,
 ) -> Result<u32,String> {
@@ -212,7 +230,8 @@ fn main() {
             deserialize,
             increment_timer,
             trigger_update,
-            fix_current
+            fix_current,
+            toggle_note,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

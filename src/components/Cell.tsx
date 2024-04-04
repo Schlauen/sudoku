@@ -1,8 +1,7 @@
 import { MutableRefObject, forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 import MiniCell from "./MiniCell";
 import { AppState, useStore } from '../store';
-import { listen } from '@tauri-apps/api/event';
-import { CellUpdateEvent, incrementCellValue } from "../Interface";
+import { incrementCellValue, onUpdateCell, toggleNote } from "../Interface";
 
 const State = {
     Blank: 0,
@@ -72,20 +71,28 @@ const Cell = forwardRef(({ row, col }: Props, ref) => {
     useImperativeHandle(ref, () => {
         return {
             focus:setFocus,
-            toggleNote:(digit:number) => {
-                let current = miniCells[digit - 1].current;
-                if (current) {
-                    current.toggle();
-                }
-            }
+            toggleNote:(digit:number) => toggleNote(row, col, digit, onError),
         };
     });
 
     useEffect(() => {
-        const unlisten = listen<CellUpdateEvent>('updateCell-'+row+'-'+col, event => {
-            console.log(event.payload);
-            setState(event.payload.state);
-            setValue(event.payload.value);
+        const unlisten = onUpdateCell(row, col, event => {
+            if (event.state != null) {
+                setState(event.state);
+            }
+            
+            if (event.value != null) {
+                setValue(event.value);
+            }
+
+            if (event.notes != null) {
+                event.notes.forEach((active, i) => {
+                    let current = miniCells[i].current;
+                    if (current) {
+                        current.setShown(active);
+                    }
+                })
+            }
         });
     
         return () => {

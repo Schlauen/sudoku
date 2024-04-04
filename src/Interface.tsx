@@ -1,10 +1,12 @@
 import { invoke } from "@tauri-apps/api";
+import { EventCallback, UnlistenFn, listen } from "@tauri-apps/api/event";
 
 export interface CellUpdateEvent {
     row: number,
     col: number,
     value: number,
     state: number,
+    notes: [boolean],
 }
 
 export interface GameUpdateEvent {
@@ -159,4 +161,24 @@ export function fixResult(
         includeSolutionCount: includeSolutionCount,
       }).then(_ => {})
       .catch(onError)
+}
+
+export function toggleNote(
+    row:number, col:number, value:number,
+    onError: (msg:string) => void
+) {
+    invoke('toggle_note', {
+        row: row,
+        col: col,
+        value: value
+      }).then(_ => {})
+      .catch(onError)
+}
+
+export function onUpdateCell(row:number, col:number, onTrigger: (event:CellUpdateEvent) => void): Promise<UnlistenFn> {
+    return listen<CellUpdateEvent>('updateCell-' + row + '-' + col, event => onTrigger(event.payload));
+}
+
+export function onUpdateGame(onTrigger: (event:GameUpdateEvent) => void): Promise<UnlistenFn> {
+    return listen<GameUpdateEvent>('updateGame', event => onTrigger(event.payload));
 }

@@ -2,9 +2,8 @@ import Checkbox from './Checkbox'
 import Button from './Button'
 import { AppState, OpenModal, useStore } from '../store';
 import Timer from './Timer';
-import { GameState, GameUpdateEvent, reset } from '../Interface';
+import { GameState, onUpdateGame, reset } from '../Interface';
 import { useEffect } from 'react';
-import { listen } from '@tauri-apps/api/event';
 
 const SolveSidebar = () => {
     const changeOpenModal = useStore(state => state.changeOpenModal);
@@ -13,8 +12,8 @@ const SolveSidebar = () => {
     const setMessage = useStore(state => state.changeMessage);
 
     useEffect(() => {
-        const unlisten = listen<GameUpdateEvent>('updateGame', event => {
-            if (event.payload.state == GameState.Solved) {
+        const unlisten = onUpdateGame(event => {
+            if (event.state == GameState.Solved) {
                 changeAppState(AppState.Solved);
                 setMessage('solved!')
             }

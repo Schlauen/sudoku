@@ -1,8 +1,7 @@
 import { useEffect, useState } from 'react'
 import Button from './Button'
 import { AppState, OpenModal, useStore } from '../store';
-import { listen } from '@tauri-apps/api/event';
-import { GameUpdateEvent, fixResult, reset, solve } from '../Interface';
+import { fixResult, onUpdateGame, reset, solve } from '../Interface';
 
 const getSolutionCount = (count:number) => {
     if (count > 4) {
@@ -20,9 +19,9 @@ const EditorSidebar = () => {
     const [clueCount, setClueCount] = useState<number>(0);
 
     useEffect(() => {
-        const unlisten = listen<GameUpdateEvent>('updateGame', event => {
-            setSolutionCount(event.payload.solution_count);
-            setClueCount(event.payload.clue_count);
+        const unlisten = onUpdateGame(event => {
+            setSolutionCount(event.solution_count);
+            setClueCount(event.clue_count);
         });
 
         return () => {unlisten.then(f => f())};

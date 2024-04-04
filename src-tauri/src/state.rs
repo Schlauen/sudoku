@@ -58,6 +58,7 @@ struct CellUpdateEvent {
     col: u8,
     value: u8,
     state: u8,
+    notes: [bool; 9],
 }
 
 #[derive(serde::Serialize, Clone)]
@@ -198,7 +199,6 @@ pub struct Playfield {
 
     #[serde(with = "array2d_e_as_string")]
     states: Array2D<CellState>,
-
     poss_rows: [u16; 9],
     poss_cols: [u16; 9],
     poss_quads: [u16; 9],
@@ -207,6 +207,7 @@ pub struct Playfield {
     difficulty: u8,
     timer_seconds: u32,
     seed: u64,
+    notes: [[[bool; 9]; 9]; 9],
 }
 
 impl Playfield {
@@ -232,12 +233,33 @@ impl Playfield {
             difficulty,
             timer_seconds: 0,
             seed: 42,
+            notes: [[[false; 9]; 9]; 9],
         };
         if let Some(r) = request {
             p.emit_update_event(r);
         }
 
         p
+    }
+
+    pub fn toggle_note(&mut self, row:usize, col:usize, value:u8, request:Option<&Request>) -> Result<(), String> {
+        if value < 1 || value > 9 {
+            return Err("Note value must be between 1 and 9".into());
+        }
+
+        let result = match self.states[(row, col)] {
+            CellState::Blank => {
+                self.notes[row][col][(value - 1) as usize] = !self.notes[row][col][(value - 1) as usize];
+                Ok(())
+            },
+            CellState::Error | CellState::Fix | CellState::Set => Err("Notes are only allowed on blank cells".into())
+        };
+
+        if let Some(r) = request {
+            self.emit_update_cell_event(row, col, r);
+        }
+
+        result
     }
 
     pub fn to_json(&self) -> Result<String, serde_json::Error> {
@@ -283,7 +305,10 @@ impl Playfield {
             CellState::Fix => {
                 return Err("Cell is immutable".into());
             },
-            CellState::Error | CellState::Blank | CellState::Set => {
+            CellState::Error => {
+                self.values[rc] = value;
+            },
+            CellState::Blank | CellState::Set => {
                 if value == 0 {
                     self.reset_value(row, col, Option::None);
                 } else {
@@ -394,16 +419,21 @@ impl Playfield {
     }
 
     pub fn fix_current(&mut self) {
-        self.solution = Option::Some(self.values.clone());
         for row in 0..9 {
             for col in 0..9 {
                 let rc = (row, col);
                 let val = self.values[rc];
                 if val > 0 {
                     self.states[rc] = CellState::Fix;
+                } else {
+                    self.states[rc] = CellState::Set;
                 }
             }
         }
+        self.solve_(0);
+        
+        self.solution = Option::Some(self.values.clone());
+        let _ = self.reset(Option::None);
     }
 
     
@@ -422,6 +452,7 @@ impl Playfield {
             col: col as u8,
             value: self.values[(row, col)],
             state: self.states[(row, col)] as u8,
+            notes: self.notes[row][col],
         };
         request.window.emit(&format!("updateCell-{}-{}", row, col), event).unwrap();
     }
@@ -480,14 +511,20 @@ impl Playfield {
     }
 
     fn update_states(&mut self, request:Option<&Request>) {
-        let cell_states = FIELDS.iter().map(|(rc, q)| {
+        let cell_states = FIELDS.iter().map(|(rc, _)| {
             let (row, col) = *rc;
             let rc = (row, col);
             let current_state = self.states[rc];
+            let value = self.values[rc];
+            if value > 0 {
+                for i in self.notes[row][col].iter_mut() {
+                    *i = false;
+                }
+            }
             let new_state = match current_state {
                 CellState::Error => {
                     if !self.is_error(row, col) {
-                        if self.values[rc] > 0 {
+                        if value > 0 {
                             CellState::Set
                         } else {
                             CellState::Blank
@@ -501,7 +538,7 @@ impl Playfield {
                     if self.is_error(row, col) {
                         CellState::Error
                     } else {
-                        if self.values[rc] > 0 {
+                        if value > 0 {
                             CellState::Set
                         } else {
                             CellState::Blank
@@ -578,6 +615,15 @@ impl Playfield {
         }
     }
 
+    fn build_poss(&mut self) {
+        let poss_rows = [0b1111111111111111u16;9];
+        let poss_cols = [0b1111111111111111u16;9];
+        let poss_quads = [0b1111111111111111u16;9];
+        FIELDS.iter().for_each(|rcq| {
+
+        })
+    }
+
     fn solve_random_(&mut self, cursor:usize, seed:u64) -> bool {
         if cursor >= 81 {
             return true;
@@ -630,7 +676,6 @@ impl Playfield {
 
     pub fn count_solutions(&mut self, limit:u8) -> u8 {
         if self.state == GameState::Error {
-            println!("error state, no solutions");
             return 0;
         }
         self.count_solutions_(0, limit)
@@ -638,6 +683,7 @@ impl Playfield {
 
     fn count_solutions_(&mut self, cursor:usize, limit:u8) -> u8 {
         if cursor >= 81 {
+            println!("solution found");
             return 1;
         }
         let rcq = FIELDS[cursor];
@@ -654,6 +700,7 @@ impl Playfield {
 
                     self.reset_value_(rcq, mov_zero_based);
                     if sum >= limit {
+                        println!("{sum}");
                         return limit;
                     }
                 }

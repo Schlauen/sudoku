@@ -6,10 +6,7 @@ interface Props {
 
 const MiniCell = forwardRef(({ digit }: Props, ref) => {
     const [shown, setShown] = useState(false);
-
-    const toggle = () => setShown(!shown);
-
-    useImperativeHandle(ref, () => ({toggle}));
+    useImperativeHandle(ref, () => ({setShown}));
     return (
         <div className='mini-cell' key={digit}>
             {shown ? digit : ''}
