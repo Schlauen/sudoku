@@ -5,11 +5,11 @@ import { readTextFile, FileEntry } from "@tauri-apps/api/fs";
 import { AppState, OpenModal, useStore } from '../store';
 import { deserialize } from '../Interface';
 
-const readDataFile = async (path:string) => {
+const readDataFile = async (path:string, onError:(error:any) => void) => {
   try {
     return await readTextFile(path);
   } catch (e) {
-    console.log(e);
+    onError(e);
   }
   return "";
 };
@@ -40,7 +40,7 @@ const LoadingModal = ({promise} : Props) => {
                 <Button
                   name={i.name || ""}
                   onClick={() => {
-                    readDataFile(i.path)
+                    readDataFile(i.path, onError)
                       .then(content => deserialize(content, includeCounts, includeCounts, onError))
                       .catch(onError);
                       

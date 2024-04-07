@@ -121,6 +121,13 @@ body {
   };
 }
 
+.cell.hint {
+  background-color: #6bc250;
+  &:hover {
+    filter: drop-shadow(0 0 10px var(--hover-color));
+  };
+}
+
 .cell.selected {
   filter: drop-shadow(0 0 10px var(--hover-color));
 }

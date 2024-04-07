@@ -2,7 +2,7 @@ import Checkbox from './Checkbox'
 import Button from './Button'
 import { AppState, OpenModal, useStore } from '../store';
 import Timer from './Timer';
-import { GameState, onUpdateGame, reset } from '../Interface';
+import { GameState, hint, onUpdateGame, reset } from '../Interface';
 import { useEffect } from 'react';
 
 const SolveSidebar = () => {
@@ -26,7 +26,7 @@ const SolveSidebar = () => {
         <div id='sidebar'>
             <Button
                 name='hint'
-                onClick={() => console.log('not implemented')}
+                onClick={() => hint(false, false, setMessage)}
             />
             <Button
                 name='reset'

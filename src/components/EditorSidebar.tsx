@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import Button from './Button'
 import { AppState, OpenModal, useStore } from '../store';
-import { fixResult, onUpdateGame, reset, solve } from '../Interface';
+import { fixResult, hint, onUpdateGame, reset, solve } from '../Interface';
 
 const getSolutionCount = (count:number) => {
     if (count > 4) {
@@ -43,7 +43,7 @@ const EditorSidebar = () => {
             />
             <Button
                 name='hint'
-                onClick={() => console.log('not implemented')}
+                onClick={() => hint(true, true, setMessage)}
             />
             <Button
                 name='load'

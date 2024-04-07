@@ -8,6 +8,7 @@ const State = {
     Fix: 1,
     Set: 2,
     Error: 3,
+    Hint: 4,
 }
 
 interface Props {
@@ -37,6 +38,9 @@ function getClassName(state:number, showErrors:boolean, focus:boolean) {
         } else {
             className = 'cell enabled';
         }
+    }
+    else if (state == State.Hint) {
+        className = 'cell enabled hint';
     }
     else {
         className = '';

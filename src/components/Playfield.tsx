@@ -1,9 +1,9 @@
 import GenericBox from './GenericBox'
 import Cell from './Cell'
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import useEventListener from '@use-it/event-listener';
 import { AppState, useStore } from '../store';
-import { setCellValue } from '../Interface';
+import { setCellValue, unhint } from '../Interface';
 
 
 interface Key {
@@ -91,6 +91,17 @@ const Playfield = () => {
 
     useEventListener('keyup', keyUpHandler, document);
     useEventListener('keydown', keyDownHandler, document);
+
+    useEffect(() => {
+        const interval = setInterval(
+            function() {
+                unhint(false, false, onError);
+            }, 
+            3000
+        );
+
+        return () => clearInterval(interval);
+    })
 
     return (
         <div id='playfield'>

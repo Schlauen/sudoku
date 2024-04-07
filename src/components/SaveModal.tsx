@@ -56,7 +56,6 @@ const SaveModal = ({promise} : Props) => {
             <Button
                 name='save'
                 onClick={() => {
-                  console.log(inputRef);
                   const filename = inputRef.current.getValue();
                   serialize(content => createDataFile(filename, content).catch(onError), onError);
                   changeOpenModal(OpenModal.None);

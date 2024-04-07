@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api";
-import { EventCallback, UnlistenFn, listen } from "@tauri-apps/api/event";
+import { UnlistenFn, listen } from "@tauri-apps/api/event";
 
 export interface CellUpdateEvent {
     row: number,
@@ -143,7 +143,6 @@ export function triggerUpdate(
     includeSolutionCount:boolean,
     onError: (msg:string) => void
 ) {
-    console.log('update triggered by frontend');
     invoke('trigger_update', {
         includeClueCount: includeClueCount,
         includeSolutionCount: includeSolutionCount,
@@ -171,6 +170,30 @@ export function toggleNote(
         row: row,
         col: col,
         value: value
+      }).then(_ => {})
+      .catch(onError)
+}
+
+export function hint(
+    includeClueCount:boolean,
+    includeSolutionCount:boolean,
+    onError: (msg:string) => void
+) {
+    invoke('hint', {
+        includeClueCount: includeClueCount,
+        includeSolutionCount: includeSolutionCount,
+      }).then(_ => {})
+      .catch(onError)
+}
+
+export function unhint(
+    includeClueCount:boolean,
+    includeSolutionCount:boolean,
+    onError: (msg:string) => void
+) {
+    invoke('unhint', {
+        includeClueCount: includeClueCount,
+        includeSolutionCount: includeSolutionCount,
       }).then(_ => {})
       .catch(onError)
 }
