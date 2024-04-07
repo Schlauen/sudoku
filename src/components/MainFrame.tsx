@@ -20,16 +20,6 @@ const renderSidebar = (appState:number) => {
   }
 }
 
-const renderPlayfield = (appState:number) => {
-  {
-    switch (appState) {
-      case AppState.Solving:
-      case AppState.Editing:
-        return <Playfield/>
-    }   
-  }
-}
-
 const MainFrame = () => {
   const appState = useStore(state => state.appState);
 
