@@ -1,154 +1,269 @@
 // Prevents additional console window on Windows in release, DO NOT REMOVE!!
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-mod state;
+mod playfield;
+mod engine;
 use std::sync::Mutex;
-use state::{CellState, Playfield};
+use playfield::Game;
+use tauri::Window;
 
-#[derive(serde::Serialize)]
+#[derive(serde::Serialize, Clone, Copy)]
 struct Cell {
     value: u8,
     state: u8,
-    game_state: u8,
 }
 
-// here we use Mutex to achieve interior mutability
+// Mutex for interior mutability
 struct PlayfieldState {
-    playfield: Mutex<Playfield>,
-    show_errors: Mutex<bool>,
+    playfield: Mutex<Game>,
 }
 
-#[derive(Clone, Copy)]
-enum EnhancedCellState {
-    Blank,
-    Fix,
-    Set,
-    Error,
-    Unknown,
-}
-
-fn enhance_cell_state(show_errors:bool, cell_state:CellState) -> EnhancedCellState {
-    match cell_state {
-        CellState::Blank => EnhancedCellState::Blank,
-        CellState::Fix => EnhancedCellState::Fix,
-        CellState::Set => EnhancedCellState::Set,
-        CellState::Error => {
-            if show_errors {
-                EnhancedCellState::Error
-            } else {
-                EnhancedCellState::Unknown
-            }
-        }
-    }
+struct Request {
+    window: Window,
+    include_clue_count: bool,
+    include_solution_count: bool,
 }
 
 #[tauri::command]
-fn get_cell_state(
+fn serialize(
     state: tauri::State<'_, PlayfieldState>,
-    row:usize, col:usize
-) -> Result<Cell,String> {
+) -> Result<String,String> {
     let playfield = state.playfield.lock().unwrap();
-    let value = playfield.get_value(row, col);
-
-    Ok(Cell{
-        value,
-        state:enhance_cell_state(
-            *state.show_errors.lock().unwrap(), 
-            playfield.get_cell_state(row, col)
-        ) as u8,
-        game_state:playfield.get_game_state() as u8,
-    })
+    playfield.to_json().map_err(|_| "serialization failed".into())
 }
 
 #[tauri::command]
-fn get_game_state(
-    state: tauri::State<'_, PlayfieldState>
-) -> Result<u8, String> {
-    let playfield = state.playfield.lock().unwrap();
-    Ok(playfield.get_game_state() as u8)
+fn toggle_note(
+    state: tauri::State<'_, PlayfieldState>,
+    window: Window,
+    row:usize, col:usize, 
+    value:usize
+) -> Result<(),String> {
+    let mut playfield = state.playfield.lock().unwrap();
+    playfield.toggle_note(
+        row, col, value,
+        Option::Some(&Request {
+            window,
+            include_clue_count:false,
+            include_solution_count:false,
+        }), 
+    )
+}
+
+#[tauri::command]
+fn increment_timer(
+    state: tauri::State<'_, PlayfieldState>,
+) -> Result<u32,String> {
+    let mut playfield = state.playfield.lock().unwrap();
+    playfield.increment_timer()
+}
+
+#[tauri::command]
+fn hint(
+    state: tauri::State<'_, PlayfieldState>,
+    window: Window,
+    include_clue_count: bool,
+    include_solution_count: bool,
+) -> Result<(),String> {
+    let mut playfield = state.playfield.lock().unwrap();
+    playfield.hint(Option::Some(&Request {
+        window,
+        include_clue_count,
+        include_solution_count,
+    }))
+}
+
+#[tauri::command]
+fn unhint(
+    state: tauri::State<'_, PlayfieldState>,
+    window: Window,
+    include_clue_count: bool,
+    include_solution_count: bool,
+) -> Result<(),String> {
+    let mut playfield = state.playfield.lock().unwrap();
+    playfield.unhint(Option::Some(&Request {
+        window,
+        include_clue_count,
+        include_solution_count,
+    }));
+    Ok(())
+}
+
+#[tauri::command]
+fn deserialize(
+    state: tauri::State<'_, PlayfieldState>,
+    window: Window,
+    msg: String,
+    include_clue_count: bool,
+    include_solution_count: bool,
+) -> Result<(), String> {
+    let mut playfield = state.playfield.lock().unwrap();
+    *playfield = Game::from_json(&msg, Option::Some(&Request {
+        window,
+        include_clue_count,
+        include_solution_count,
+    }));
+    Ok(())
 }
 
 #[tauri::command]
 fn generate(
     state: tauri::State<'_, PlayfieldState>,
-    difficulty: u8,
-) -> Result<u8, String> {
-    state.playfield.lock().unwrap().generate(difficulty).map(|game_state| game_state as u8)
+    window: Window,
+    difficulty: u8, 
+    seed: u64,
+    include_clue_count: bool,
+    include_solution_count: bool,
+    fix_result: bool,
+) -> Result<(), String> {
+    state.playfield.lock().unwrap().generate(
+        difficulty, 
+        seed, 
+        Option::Some(&Request {
+            window,
+            include_clue_count,
+            include_solution_count,
+        }),
+        fix_result,
+    ).map(|_| ())
 }
 
 #[tauri::command]
-fn toggle_show_errors(
+fn fix_current(
+    state: tauri::State<'_, PlayfieldState>, 
+    window: Window,
+    include_clue_count: bool,
+    include_solution_count: bool,
+) -> Result<(), String> {
+    let mut playfield = state.playfield.lock().unwrap();
+    let result = playfield.start_solving();
+    playfield.emit_update_event(
+        &Request {
+            window,
+            include_clue_count,
+            include_solution_count,
+        }
+    );
+    result
+}
+
+#[tauri::command]
+fn trigger_update(
     state: tauri::State<'_, PlayfieldState>,
-) -> Result<bool,String> {
-    let mut show_errors = state.show_errors.lock().unwrap();
-    *show_errors = !(*show_errors);
-    Ok(*show_errors)
+    window: Window,
+    include_clue_count: bool,
+    include_solution_count: bool,
+) -> Result<(), String> {
+    state.playfield.lock().unwrap().emit_update_event(
+        &Request {
+            window,
+            include_clue_count,
+            include_solution_count,
+        }
+    );
+    Ok(())
 }
 
 #[tauri::command]
 fn increment_value(
     state:tauri::State<'_, PlayfieldState>,
-    row:usize, col:usize
-) -> Result<Cell, String> {
+    window: Window,
+    row:usize, col:usize,
+    include_clue_count: bool,
+    include_solution_count: bool,
+) -> Result<(), String> {
     let mut playfield = state.playfield.lock().unwrap();
     let value = playfield.get_value(row, col);
-    playfield.set_value((value + 1) % 10, row, col).map(|new_value| Cell {
-        value: new_value,
-        state: enhance_cell_state(
-            *state.show_errors.lock().unwrap(), 
-            playfield.get_cell_state(row, col)
-        ) as u8,
-        game_state:playfield.get_game_state() as u8,
-    })
+    playfield.set_value(
+        (value + 1) % 10, 
+        row, 
+        col, 
+        Option::Some(&Request {
+            window,
+            include_clue_count,
+            include_solution_count,
+        })
+    ).map(|_| ())
 }
 
 #[tauri::command]
 fn set_value(
     state:tauri::State<'_, PlayfieldState>,
-    row:usize, col:usize, value:u8
-) -> Result<Cell, String> {
+    window: Window,
+    row:usize, col:usize, value:u8,
+    include_clue_count: bool,
+    include_solution_count: bool,
+) -> Result<(), String> {
     let mut playfield = state.playfield.lock().unwrap();
-    playfield.set_value(value, row, col).map(|new_value| Cell {
-        value: new_value,
-        state: enhance_cell_state(
-            *state.show_errors.lock().unwrap(), 
-            playfield.get_cell_state(row, col)
-        ) as u8,
-        game_state:playfield.get_game_state() as u8,
-    })
+    playfield.set_value(
+        value, 
+        row, 
+        col, 
+        Option::Some(&Request {
+            window,
+            include_clue_count,
+            include_solution_count,
+        })
+    ).map(|_| ())
 }
 
 #[tauri::command]
 fn reset(
-    state:tauri::State<'_, PlayfieldState>
-) -> Result<u8, String> {
+    state:tauri::State<'_, PlayfieldState>,
+    window: Window,
+    include_clue_count: bool,
+    include_solution_count: bool,
+    hard: bool, // if this is set to true, a completely new game is created
+) -> Result<(), String> {
     let mut playfield = state.playfield.lock().unwrap();
-    playfield.reset().map(|game_state| game_state as u8)
+    if hard {
+        *playfield = Game::new(0, Option::Some(&Request {
+            window,
+            include_clue_count,
+            include_solution_count,
+        }));
+        Ok(())
+    } else {
+        playfield.reset(Option::Some(&Request {
+            window,
+            include_clue_count,
+            include_solution_count,
+        })).map(|_| ())
+    }
 }
 
 #[tauri::command]
 fn solve(
-    state:tauri::State<'_, PlayfieldState>
-) -> Result<u8, String> {
+    state:tauri::State<'_, PlayfieldState>,
+    window: Window,
+    include_clue_count: bool,
+    include_solution_count: bool,
+) -> Result<(), String> {
     let mut playfield = state.playfield.lock().unwrap();
-    playfield.solve().map(|game_state| game_state as u8)
+    playfield.solve(Option::Some(&Request {
+        window,
+        include_clue_count,
+        include_solution_count,
+    })).map(|_| ())
 }
 
 fn main() {
     tauri::Builder::default()
         .manage(PlayfieldState {
-            playfield: Mutex::new(Playfield::new()),
-            show_errors: Mutex::new(false),
+            playfield: Mutex::new(Game::new(0, Option::None)),
         })
         .invoke_handler(tauri::generate_handler![
             increment_value,
             generate,
-            get_cell_state,
             set_value,
             reset,
             solve,
-            get_game_state,
-            toggle_show_errors,
+            serialize, deserialize,
+            increment_timer,
+            trigger_update,
+            fix_current,
+            toggle_note,
+            hint, unhint,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

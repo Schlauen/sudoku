@@ -1,34 +1,41 @@
-import { useState } from "react";
 import "./App.css";
 import MainFrame from "./components/MainFrame";
+import LoadingModal from "./components/LoadingModal";
+import { BaseDirectory, readDir } from "@tauri-apps/api/fs";
+import GenerateModal from "./components/GenerateModal";
+import { AppState, OpenModal, useStore } from "./store";
+import SaveModal from "./components/SaveModal";
+
+const getEntries = async () => {
+  const entries = await readDir("savegames", { dir: BaseDirectory.AppData, recursive: false });
+  return entries;
+}
+
+const renderModal = (openModal: number) => {
+  {
+    switch (openModal) {
+      case OpenModal.SaveModal:
+        return <SaveModal 
+          promise={getEntries()}
+        />
+      case OpenModal.GenerateModal:
+        return <GenerateModal/>
+      case OpenModal.LoadModal:
+        return <LoadingModal
+          promise={getEntries()}
+        />
+    }
+  }
+}
 
 function App() {
-  const [left, setLeft] = useState(0);
-  const [top, setTop] = useState(0);
-
-  // onKeyDown handler function
-  const keyDownHandler = (event: React.KeyboardEvent<HTMLDivElement>) => {
-    console.log(left, top);
-    if (event.code === "ArrowUp") {
-      setTop((top) => top - 10);
-    }
-
-    if (event.code === "ArrowDown") {
-      setTop((top) => top + 10);
-    }
-
-    if (event.code === "ArrowLeft") {
-      setLeft((left) => left - 10);
-    }
-
-    if (event.code === "ArrowRight") {
-      setLeft((left) => left + 10);
-    }
-  };
-
+  const openModal = useStore(state => state.openModal);
   return (
-    <div className="container" onKeyDown={keyDownHandler}>
-      <MainFrame />
+    <div className="container">
+      <MainFrame/>
+      {
+        renderModal(openModal)
+      }
     </div>
   );
 }

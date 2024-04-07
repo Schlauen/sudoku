@@ -1,27 +1,20 @@
 import GenericBox from './GenericBox'
 import Cell from './Cell'
-import { forwardRef, useImperativeHandle, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import useEventListener from '@use-it/event-listener';
+import { AppState, useStore } from '../store';
+import { setCellValue, unhint } from '../Interface';
 
 
 interface Key {
     key:string;
 }
 
-interface Props {
-    onError: (message:string) => void;
-    setGameState: (newState:number) => void;
-}
-
-const Playfield = forwardRef(({onError, setGameState} : Props, ref) => {
+const Playfield = () => {
     const [focus, setFocus] = useState(40);
     const [spacePressed, setSpacePressed] = useState(false);
     
     const cells = Array(81).fill(undefined).map(_ => useRef<any>(null));
-
-    const update = () => cells.forEach(c => c.current.update());
-    
-    useImperativeHandle(ref, () => ({update}));
 
     const setFocusTo = (newFocus:number) => {
         if (focus < 0) {
@@ -30,7 +23,6 @@ const Playfield = forwardRef(({onError, setGameState} : Props, ref) => {
             cells[focus].current.focus(false);
         }
         setFocus(newFocus);
-        console.log(newFocus);
         if (newFocus < 0) {
             return;
         }
@@ -40,16 +32,26 @@ const Playfield = forwardRef(({onError, setGameState} : Props, ref) => {
     const focusCol = () => focus % 9;
     const digitPessed = (key:string, digit:number) => key === digit.toString();
     const toggleNote = (digit:number) => cells[focus].current.toggleNote(digit);
-    const setValue = (digit:number) => cells[focus].current.setValue(digit);
+    const onError = useStore(state => state.changeMessage);
+
+    const includeCounts = useStore(state => state.appState) == AppState.Editing; 
+    const setValue = (digit:number) => setCellValue(digit, focusRow(), focusCol(), includeCounts, includeCounts, onError);
+    const controlsEnabled = useStore(state => state.controlsEnabled);
 
     function keyDownHandler({key}:Key) {
-        
-        if (key === " ") setSpacePressed(true);
+        if (!controlsEnabled) {
+            return;
+        }
+
+        if (key === "Control") setSpacePressed(true);
     };
 
     function keyUpHandler({key}:Key) {
-        console.log(key);
-        if (key === " ") setSpacePressed(false);
+        if (!controlsEnabled) {
+            return;
+        }
+
+        if (key === "Control") setSpacePressed(false);
 
         if (key === "ArrowDown" || key === "s") {
             let newFocus = focus + (focusRow() >= 8 ? 0 : 9);
@@ -90,6 +92,17 @@ const Playfield = forwardRef(({onError, setGameState} : Props, ref) => {
     useEventListener('keyup', keyUpHandler, document);
     useEventListener('keydown', keyDownHandler, document);
 
+    useEffect(() => {
+        const interval = setInterval(
+            function() {
+                unhint(false, false, onError);
+            }, 
+            3000
+        );
+
+        return () => clearInterval(interval);
+    })
+
     return (
         <div id='playfield'>
             <GenericBox
@@ -103,9 +116,7 @@ const Playfield = forwardRef(({onError, setGameState} : Props, ref) => {
                         keyPrefix='box:'
                         childFactory={
                             (row, col) => <Cell 
-                                row={row} col={col} 
-                                onError={onError}
-                                setGameState={setGameState}
+                                row={row} col={col}
                                 ref={cells[row*9 + col]}
                             />
                         }
@@ -114,6 +125,6 @@ const Playfield = forwardRef(({onError, setGameState} : Props, ref) => {
             />
         </div>
     )
-});
+};
 
 export default Playfield

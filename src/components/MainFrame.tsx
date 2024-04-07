@@ -1,22 +1,45 @@
-import { useRef } from 'react'
 import Playfield from './Playfield'
-import Sidebar from './Sidebar'
+import SolveSidebar from './SolveSidebar'
 import Footer from './Footer';
 import Header from './Header';
+import { AppState, useStore } from '../store';
+import EditorSidebar from './EditorSidebar';
+import StartSidebar from './StartSidebar';
+
+const renderSidebar = (appState:number) => {
+  {
+    switch (appState) {
+      case AppState.Start:
+        return <StartSidebar/>
+      case AppState.Solved:
+      case AppState.Solving:
+        return <SolveSidebar/>
+      case AppState.Editing:
+        return <EditorSidebar/>
+    }   
+  }
+}
+
+const renderPlayfield = (appState:number) => {
+  {
+    switch (appState) {
+      case AppState.Solving:
+      case AppState.Editing:
+        return <Playfield/>
+    }   
+  }
+}
 
 const MainFrame = () => {
-  const playfield = useRef<any>(null);
-  const headerRef = useRef<any>(null);
-
-  const update = () => playfield.current.update();
-  const setMessage = (msg:string) => headerRef.current.setMessage(msg);
-  const setGameState = (newState:number) => headerRef.current.setGameState(newState);
+  const appState = useStore(state => state.appState);
 
   return (
     <div id='main-frame'>
-      <Header ref={headerRef}/>
-      <Sidebar updatePlayfield={update} onError={setMessage} />
-      <Playfield ref={playfield} onError={setMessage} setGameState={setGameState}/>
+      <Header/>
+      {
+        renderSidebar(appState)
+      }
+      <Playfield/>
       <Footer />
     </div>
   )
