@@ -53,6 +53,7 @@ pub enum GameState {
     Running,
     Solved,
     Error,
+    Editing,
 }
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -157,12 +158,16 @@ impl Game {
         p
     }
 
+    pub fn get_state(&self) -> GameState {
+        self.state
+    }
+
     pub fn hint(&mut self, request:Option<&Request>) -> Result<(), String> {
         match self.state {
             GameState::Error | GameState::Solved => {
                 return Err("Hints not possible in current state".into());
             },
-            GameState::Blank | GameState::Running => {}
+            GameState::Editing | GameState::Blank | GameState::Running => {}
         };
 
         engine::hint(&self.get_values()).map(|(row, col)| {
@@ -240,7 +245,7 @@ impl Game {
 
     pub fn increment_timer(&mut self) -> Result<u32, String> {
         match self.state {
-            GameState::Blank | GameState::Solved => {},
+            GameState::Editing | GameState::Blank | GameState::Solved => {},
             GameState::Error | GameState::Running => self.timer_seconds += 1,      
         };
         
@@ -262,7 +267,7 @@ impl Game {
         match self.state {
             GameState::Blank => self.state = GameState::Running,
             GameState::Solved => return Err("Already solved".into()),
-            GameState::Error | GameState::Running => {}        
+            GameState::Editing | GameState::Error | GameState::Running => {}        
         };
         
         self.cells[row][col].set_value(value).map(|(changed, new_value)| {
@@ -327,7 +332,9 @@ impl Game {
 
         self.cells.iter_mut().flatten().for_each(|cell| {
             let _ = cell.set_value(clues[(cell.row.into(), cell.col.into())]);
-            cell.solution = Option::Some(solution[(cell.row.into(), cell.col.into())]);
+            if fix_result {
+                cell.solution = Option::Some(solution[(cell.row.into(), cell.col.into())]);
+            }
         });
 
         if fix_result {
@@ -347,6 +354,16 @@ impl Game {
             if cell.value > 0 {
                 cell.set_state(CellState::Fix);
             }
+        });
+
+        let result = engine::solve(&self.get_values(), Option::None);
+        if result.is_err() {
+            return Err(result.unwrap_err());
+        }
+
+        let solution = result.unwrap();
+        self.cells.iter_mut().flatten().for_each(|cell| {
+            cell.solution = Option::Some(solution[(cell.row.into(), cell.col.into())])
         });
 
         self.state = GameState::Running;
@@ -381,7 +398,7 @@ impl Game {
             GameState::Error => {
                 return Err("Conflict detected, can't solve".into())
             },
-            GameState::Blank | GameState::Running => {}
+            GameState::Editing | GameState::Blank | GameState::Running => {}
         };
 
         engine::solve(&self.get_values(), Option::None).map(|values| {

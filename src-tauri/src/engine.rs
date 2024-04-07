@@ -199,12 +199,12 @@ impl Sudoku {
 
     fn get_possible_moves_rnd<R>(&self, rcq:(usize, usize, usize), rng: &mut R) -> Option<Vec<usize>>
     where R: Rng + ?Sized {
-        let moves_option = self.get_possible_moves(rcq);
-        match self.get_possible_moves(rcq).as_mut() {
+        let mut m = self.get_possible_moves(rcq);
+        match m.as_mut() {
             Some(moves) => moves.shuffle(rng),
             None => {}
         }
-        moves_option
+        m
     }
 
     fn get_possible_moves(&self, rcq:(usize, usize, usize)) -> Option<Vec<usize>> {

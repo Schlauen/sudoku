@@ -1,9 +1,9 @@
 import "./App.css";
 import MainFrame from "./components/MainFrame";
-import LoadingModal from "./components/LoadingModal";
+import LoadingModal from "./components/LoadModal";
 import { BaseDirectory, readDir } from "@tauri-apps/api/fs";
 import GenerateModal from "./components/GenerateModal";
-import { AppState, OpenModal, useStore } from "./store";
+import { OpenModal, useStore } from "./store";
 import SaveModal from "./components/SaveModal";
 
 const getEntries = async () => {

@@ -96,14 +96,14 @@ fn deserialize(
     msg: String,
     include_clue_count: bool,
     include_solution_count: bool,
-) -> Result<(), String> {
+) -> Result<u8, String> {
     let mut playfield = state.playfield.lock().unwrap();
     *playfield = Game::from_json(&msg, Option::Some(&Request {
         window,
         include_clue_count,
         include_solution_count,
     }));
-    Ok(())
+    Ok(playfield.get_state() as u8)
 }
 
 #[tauri::command]

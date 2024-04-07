@@ -20,6 +20,7 @@ export const GameState = {
     Running: 1,
     Solved: 2,
     Error: 3,
+    Editing: 4,
 }
 
 export async function serialize(
@@ -40,13 +41,14 @@ export function deserialize(
     content:string,
     includeClueCount:boolean,
     includeSolutionCount:boolean,
+    onSuccess: (state:number) => void,
     onError: (msg:string) => void
 ) {
-    invoke('deserialize', {
+    invoke<number>('deserialize', {
         msg:content,
         includeClueCount: includeClueCount,
         includeSolutionCount: includeSolutionCount
-    }).then(_ => {}).catch(onError)
+    }).then(onSuccess).catch(onError)
 }
 
 export function setCellValue(

@@ -3,7 +3,7 @@ import Button from './Button'
 import "./Modal.css";
 import { readTextFile, FileEntry } from "@tauri-apps/api/fs";
 import { AppState, OpenModal, useStore } from '../store';
-import { deserialize } from '../Interface';
+import { GameState, deserialize } from '../Interface';
 
 const readDataFile = async (path:string, onError:(error:any) => void) => {
   try {
@@ -22,12 +22,25 @@ const LoadingModal = ({promise} : Props) => {
   const [items, setItems] = useState<FileEntry[]>([]);
   const changeOpenModal = useStore(state => state.changeOpenModal);
   const onError = useStore(state => state.changeMessage);
-
-  const appState = useStore(state => state.appState);
   const changeAppState = useStore(state => state.changeAppState);
   
   promise.then(i => setItems(i));
   const includeCounts = useStore(state => state.appState) == AppState.Editing;
+
+  const onSuccess = (state:number) => {
+    if (state == GameState.Blank || state == GameState.Editing) {
+      changeAppState(AppState.Editing);
+    }
+    else if (state == GameState.Running) {
+      changeAppState(AppState.Solving);
+    }
+    else if (state == GameState.Solved) {
+      changeAppState(AppState.Solved);
+    }
+    else if (state == GameState.Error) {
+      changeAppState(AppState.Editing);
+    }
+  }
 
   return (
     <div className='modal-background'>
@@ -41,13 +54,10 @@ const LoadingModal = ({promise} : Props) => {
                   name={i.name || ""}
                   onClick={() => {
                     readDataFile(i.path, onError)
-                      .then(content => deserialize(content, includeCounts, includeCounts, onError))
+                      .then(content => deserialize(content, includeCounts, includeCounts, onSuccess, onError))
                       .catch(onError);
                       
                     changeOpenModal(OpenModal.None);
-                    if (appState != AppState.Editing) {
-                      changeAppState(AppState.Solving);
-                    }
                   }}
                 />
               ))
